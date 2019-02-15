@@ -1,2 +1,55 @@
 # OnlineNMF.jl
 Online Non-negative Matrix Factorization
+
+## Description
+OnlineNMF.jl binarizes multiple CSV files, summarizes the information of data matrices and, performs some online-NMF functions for extreamly large scale matrices.
+
+## Algorithms
+- Multiplicative Update (MU)
+  - Alpha-Divergence
+    - 
+    - 
+    - 
+  - Beta-Divergence
+    - 
+    - 
+    - 
+- Simultaneous NMF (siNMF)
+- Non-negative Tucker decomposition (NTD)
+
+## Installation
+<!-- ```julia
+julia> Pkg.add("OnlineNMF")
+```
+ -->
+```julia
+# push the key "]" and type the following command.
+(v1.0) pkg> add https://github.com/rikenbit/OnlineNMF.jl
+(v1.0) pkg> add PlotlyJS
+# After that, push Ctrl + C to leave from Pkg REPL mode
+```
+
+## Basic API usage
+### Preprocess of CSV
+...
+
+### Setting for plot
+...
+
+### Alpha-Divergence
+...
+
+### Beta-Divergence
+...
+
+### siNMF
+...
+
+### NTD
+...
+
+## Command line usage
+...
+
+## Distributed Computing with Mulitple Stepsize Setting
+...
