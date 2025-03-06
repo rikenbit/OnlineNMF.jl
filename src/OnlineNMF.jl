@@ -2,33 +2,30 @@ module OnlineNMF
 
 using DelimitedFiles:
     writedlm, readdlm
-using Statistics:
-    mean, var
-using LinearAlgebra:
-    Diagonal, lu!, qr!, svd, dot, norm, eigvecs
 using Random:
     randperm
+using LinearAlgebra:
+    Diagonal
 using ProgressMeter:
 	Progress, next!
 using ArgParse:
     ArgParseSettings, parse_args, @add_arg_table
-using StatsBase:
-	percentile
-using DataFrames:
-	DataFrame
-using GLM:
-	glm, coef, IdentityLink, @formula
-using Distributions:
-	Gamma, ccdf, Chisq
 using CodecZstd:
 	ZstdCompressorStream, ZstdDecompressorStream
+using SparseArrays:
+    sparse
+using LoopVectorization:
+    @view, @turbo
+using Base.Threads
 
-export output, common_parse_commandline, csv2bin, mu, sinmf, ntd
+export output, parse_commandline, nmf, dnmf
 
 include("Utils.jl")
-include("csv2bin.jl")
-include("mu.jl")
-include("sinmf.jl")
-include("ntd.jl")
+include("nmf.jl")
+include("dnmf.jl")
+include("gdnmf.jl")
+include("sparse_nmf.jl")
+include("sparse_dnmf.jl")
+include("sparse_gdnmf.jl")
 
 end

@@ -209,9 +209,3 @@ testfilesize(false, joinpath(tmp, "Z.zst"))
 
 
 # ####################################
-
-
-# ####################################
-# println("####### Non-negative Tucker decomposition (Command line) #######")
-
-# ####################################

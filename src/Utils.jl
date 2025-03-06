@@ -1,1033 +1,347 @@
 # Types
+struct NMF end
+struct DNMF end
+struct SPARSE_NMF end
+struct SPARSE_DNMF end
 struct ALPHA end
 struct BETA end
-struct MULTIALPHA end
-struct MULTIBETA end
-struct NTDALPHA end
-struct NTDBETA end
 
-# # Check NaN value (only GD)
-# function checkNaN(W::AbstractArray, cca::GD)
-#     l = length(W)
-#     for i=1:l
-#         if any(isnan, W[i])
-#             error("NaN values are generated. Select other stepsize")
-#         end
-#     end
-# end
+function load_or_zero(init, nums)
+    if init == nothing
+        return zeros(nums, nums)
+    elseif init isa String
+        mat = read_csv(init, Float32)
+        return mat[1:nums, 1:nums]
+    else
+        error("Invalid input for initialization")
+    end
+end
 
-# # Check NaN value (other CCA)
-# function checkNaN(N::AbstractArray, s::Number, n::Number, W::AbstractArray, evalfreq::Number, cca::Union{SGD,RSGD,HORST,ORTHITER})
-#     l = length(W)
-#     for i=1:l
-#         if mod((N[i]*(s-1)+n), evalfreq) == 0
-#             if any(isnan, W[i])
-#                 error("NaN values are generated. Select other stepsize")
-#             end
-#         end
-#     end
-# end
+function load_or_random(init, rows, cols)
+    if init == nothing
+        return rand(Float32, rows, cols)
+    elseif init isa String
+        mat = read_csv(init, Float32)
+        return mat[:, 1:cols]
+    else
+        error("Invalid input for initialization")
+    end
+end
 
-# # Output the result of CCA
-# function output(outdir::AbstractString, out::Tuple, cca::NIPALS)
-#     writecsv(joinpath(outdir, "T.csv"), out[1])
-#     writecsv(joinpath(outdir, "P.csv"), out[2])
-#     writecsv(joinpath(outdir, "U.csv"), out[3])
-#     writecsv(joinpath(outdir, "Q.csv"), out[4])
-#     writecsv(joinpath(outdir, "B.csv"), out[5])
-# end
+# Algorithm Selection
+function select_algorithm(algorithm::AbstractString, alpha::Number, beta::Number)
+    valid_algorithms = ("pearson", "hellinger", "neyman", "alpha", "frobenius", "kl", "is", "beta")
+    
+    if algorithm ∉ valid_algorithms
+        throw(ArgumentError("Invalid algorithm: \"$algorithm\". Must be one of: $(join(valid_algorithms, ", "))"))
+    end
 
-# # Output the result of CCA
-# function output(outdir::AbstractString, out::Tuple, cca::Union{GD,SGD,RSGD,HORST,ORTHITER})
-#     l = length(out[1])
-#     for i = 1:l
-#         writecsv(joinpath(outdir, "Eigen_vectors"*string(i)*".csv"), out[1][i])
-#         writecsv(joinpath(outdir, "Eigen_values"*string(i)*".csv"), out[2][i])
-#         writecsv(joinpath(outdir, "LatentVariables"*string(i)*".csv"), out[3][i])
-#         writecsv(joinpath(outdir, "ExpCorVar"*string(i)*".csv"), out[4][i])
-#         writecsv(joinpath(outdir, "TotalCorVar"*string(i)*".csv"), out[5][i])
-#         writecsv(joinpath(outdir, "Objective"*string(i)*".csv"), out[6][i])
-#         writecsv(joinpath(outdir, "AvgLatentCor"*string(i)*".csv"), out[7][i])
-#     end
-#     if out[8] == 1
-#         touch(joinpath(outdir, "Converged"))
-#     end
-# end
+    if algorithm in ("pearson", "hellinger", "neyman", "alpha")
+        algorithm = ALPHA()
+        alpha = if algorithm == "pearson"
+            2
+        elseif algorithm == "hellinger"
+            0.5
+        elseif algorithm == "neyman"
+            -1
+        else
+            alpha  # alphaは変更しない
+        end
+    elseif algorithm in ("frobenius", "kl", "is", "beta")
+        algorithm = BETA()
+        beta = if algorithm == "frobenius"
+            2
+        elseif algorithm == "kl"
+            1
+        elseif algorithm == "is"
+            0
+        else
+            beta  # betaは変更しない
+        end
+    end
+    return algorithm, alpha, beta
+end
 
-# # Output the result of CCA
-# function output(outdir::AbstractString, out::Tuple, cca::OOCMCCA)
-#     l = length(out[1])
-#     for i = 1:l
-#         writecsv(joinpath(outdir, "Eigen_vectors"*string(i)*".csv"), out[1][i])
-#         writecsv(joinpath(outdir, "Eigen_values"*string(i)*".csv"), out[2][i])
-#         writecsv(joinpath(outdir, "LatentVariables"*string(i)*".csv"), out[3][i])
-#         writecsv(joinpath(outdir, "ExpCorVar"*string(i)*".csv"), out[4][i])
-#         writecsv(joinpath(outdir, "TotalCorVar"*string(i)*".csv"), out[5][i])
-#         writecsv(joinpath(outdir, "Objective"*string(i)*".csv"), out[6][i])
-#         writecsv(joinpath(outdir, "AvgLatentCor"*string(i)*".csv"), out[7][i])
-#     end
-# end
+# Rho function (Beta-divergence)
+function rho(beta; root=false)
+    if root
+        return 0.5
+    else
+        if beta < 1
+            return 1 / (2 - beta)
+        elseif 1 <= beta && beta <= 2
+            return 1
+        elseif beta > 2
+            return 1 / (beta - 1)
+        end
+    end
+end
 
-writecsv(filename::AbstractString, data) = writedlm(filename, data, ',')
-readcsv(filename::AbstractString) = readdlm(filename, ',')
-readcsv(filename::AbstractString, ::Type{T}) where {T} = readdlm(filename, ',', T)
+# Check NaN value
+function checkNaN(X::AbstractArray)
+    if any(isnan, X)
+        error("NaN values are generated. Select other stepsize")
+    end
+end
 
-# # Parse command line options
-# function parse_commandline(cca::OOCMCCA)
-#     s = ArgParseSettings()
+# Output the result of NMF/DNMF
+function output(outdir::AbstractString, out::Tuple, lower::Number)
+    write_csv(joinpath(outdir, "U.csv"), out[1])
+    write_csv(joinpath(outdir, "V.csv"), out[2])
+    write_csv(joinpath(outdir, "RecError.csv"), out[3])
+    if out[3] < lower && out[4] == 1
+        touch(joinpath(outdir, "Converged"))
+    end
+end
 
-#     @add_arg_table s begin
-#         "--input", "-i"
-#             help = "Julia Binary file generated by `OnlineCCA.csv2bin` function."
-#             arg_type = AbstractString
-#             required = true
-#         "--outdir", "-o"
-#             help = "The directory specified the directory you want to save the result."
-#             arg_type = Union{Nothing,AbstractString}
-#             default = "."
-#             required = false
-#         "--scale"
-#             help = "{log,ftt,raw}-scaling of the value."
-#             arg_type = AbstractString
-#         "--pseudocount", "-p"
-#             help = "The number specified to avoid NaN by log10(0) and used when `Feature_LogMeans.csv` <log10(mean+pseudocount) value of each feature> is generated."
-#             arg_type = Union{Number,AbstractString}
-#         "--colmeanlist", "-m"
-#             help = "The mean of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--colvarlist", "-v"
-#             help = "The variance of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--dim", "-d"
-#             help = "The number of dimension of CCA."
-#             arg_type = Union{Number,AbstractString}
-#             default = 3
-#         "--numepoch", "-e"
-#             help = "The number of epoch."
-#             arg_type = Union{Number,AbstractString}
-#             default = 5
-#         "--lower"
-#             help = "Stopping Criteria (When the relative change of error is below this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 0
-#         "--upper"
-#             help = "Stopping Criteria (When the relative change of error is above this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f+38
-#         "--offsetStoch"
-#             help = "Off set value for avoding overflow when calculating stochastic gradient"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f-20
-#         "--initW"
-#             help = "The CSV file saving the initial values of eigenvectors."
-#             arg_type = Union{Nothing,AbstractString,}
-#             default = nothing
-#         "--perm"
-#             help = "Whether the data matrix is shuffled at random"
-#             arg_type = Union{Bool,AbstractString}
-#             default = false
-#     end
+write_csv(filename::AbstractString, data) = writedlm(filename, data, ',')
+read_csv(filename::AbstractString) = readdlm(filename, ',')
+read_csv(filename::AbstractString, ::Type{T}) where {T} = readdlm(filename, ',', T)
 
-#     return parse_args(s)
-# end
+# Parse command line options
+function parse_commandline(nmfmodel::Union{NMF,SPARSE_NMF})
+    s = ArgParseSettings()
 
-# # Parse command line options
-# function parse_commandline(cca::Union{HORST,ORTHITER})
-#     s = ArgParseSettings()
+    @add_arg_table s begin
+        "--input", "-i"
+            help = "Julia Binary file generated by `OnlinePCA.csv2bin` function."
+            arg_type = AbstractString
+            required = true
+        "--outdir", "-o"
+            help = "The directory user want to save the result."
+            arg_type = AbstractString
+            default = "."
+            required = false
+        "--alpha", "-a"
+            help = "The parameter of Alpha-divergence."
+            arg_type = Union{Number,AbstractString}
+            default = 1
+        "--beta", "-b"
+            help = "The parameter of Beta-divergence."
+            arg_type = Union{Number,AbstractString}
+            default = 2
+        "--l1u",
+            help = "L1-regularization parameter for the factor matrix U."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l1v",
+            help = "L1-regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l2u",
+            help = "L2-regularization parameter for the factor matrix U."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l2u",
+            help = "L2-regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--dim", "-d"
+            help = "The number of dimension of NMF."
+            arg_type = Union{Number,AbstractString}
+            default = 3
+        "--numepoch", "-e"
+            help = "The number of epochs."
+            arg_type = Union{Number,AbstractString}
+            default = 5
+        "--chunksize", "-c"
+            help = "The number of rows reading at once (e.g. 5000)."
+            arg_type = Union{Number,AbstractString}
+            default = 1
+        "--lower"
+            help = "Stopping Criteria (When the relative change of error is below this value, the calculation is terminated)."
+            arg_type = Union{Number,AbstractString}
+            default = 0
+        "--upper"
+            help = "Stopping Criteria (When the relative change of error is above this value, the calculation is terminated)."
+            arg_type = Union{Number,AbstractString}
+            default = 1.0f+38
+        "--initU"
+            help = "The CSV file saving the initial values of factor matrix U."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+        "--initV"
+            help = "The CSV file saving the initial values of factor matrix V."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+        "--logdir", "-l"
+            help = "The directory where intermediate files are saved, in every epoch."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+    end
 
-#     @add_arg_table s begin
-#         "--input", "-i"
-#             help = "Julia Binary file generated by `OnlineCCA.csv2bin` function."
-#             arg_type = AbstractString
-#             required = true
-#         "--outdir", "-o"
-#             help = "The directory specified the directory you want to save the result."
-#             arg_type = Union{Nothing,AbstractString}
-#             default = "."
-#             required = false
-#         "--scale"
-#             help = "{log,ftt,raw}-scaling of the value."
-#             arg_type = AbstractString
-#         "--pseudocount", "-p"
-#             help = "The number specified to avoid NaN by log10(0) and used when `Feature_LogMeans.csv` <log10(mean+pseudocount) value of each feature> is generated."
-#             arg_type = Union{Number,AbstractString}
-#         "--colmeanlist", "-m"
-#             help = "The mean of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--colvarlist", "-v"
-#             help = "The variance of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--dim", "-d"
-#             help = "The number of dimension of CCA."
-#             arg_type = Union{Number,AbstractString}
-#             default = 3
-#         "--numepoch", "-e"
-#             help = "The number of epoch."
-#             arg_type = Union{Number,AbstractString}
-#             default = 5
-#         "--lower"
-#             help = "Stopping Criteria (When the relative change of error is below this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 0
-#         "--upper"
-#             help = "Stopping Criteria (When the relative change of error is above this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f+38
-#         "--evalfreq"
-#             help = "Evaluation Frequency of Reconstruction Error"
-#             arg_type = Union{Number,AbstractString}
-#             default = 5000
-#         "--offsetStoch"
-#             help = "Off set value for avoding overflow when calculating stochastic gradient"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f-20
-#         "--initW"
-#             help = "The CSV file saving the initial values of eigenvectors."
-#             arg_type = Union{Nothing,AbstractString,}
-#             default = nothing
-#         "--logdir", "-l"
-#             help = "The directory where intermediate files are saved, in every evalfreq (e.g. 5000) iteration."
-#             arg_type = Union{Nothing,AbstractString}
-#             default = nothing
-#         "--perm"
-#             help = "Whether the data matrix is shuffled at random"
-#             arg_type = Union{Bool,AbstractString}
-#             default = false
-#     end
+    return parse_args(s)
+end
 
-#     return parse_args(s)
-# end
+# Parse command line options
+function parse_commandline(nmfmodel::Union{DNMF,SPARSE_DNMF})
+    s = ArgParseSettings()
 
-# # Parse command line options
-# function parse_commandline(cca::NIPALS)
-#     s = ArgParseSettings()
+    @add_arg_table s begin
+        "--input", "-i"
+            help = "Julia Binary file generated by `OnlinePCA.csv2bin` function."
+            arg_type = AbstractString
+            required = true
+        "--outdir", "-o"
+            help = "The directory user want to save the result."
+            arg_type = AbstractString
+            default = "."
+            required = false
+        "--beta", "-b"
+            help = "The parameter of Beta-divergence."
+            arg_type = Union{Number,AbstractString}
+            default = 2
+            "--binu",
+            help = "Binary {0,1} regularization parameter for the factor matrix U."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--binv",
+            help = "Binary {0,1} regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--teru",
+            help = "Ternary {0,1,2} regularization parameter for the factor matrix U."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--terv",
+            help = "Ternary {0,1,2} regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--graphv",
+            help = "Graph regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l1u",
+            help = "L1-regularization parameter for the factor matrix U."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l1v",
+            help = "L1-regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l2u",
+            help = "L2-regularization parameter for the factor matrix U."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--l2u",
+            help = "L2-regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
+        "--dim", "-d"
+            help = "The number of dimension of NMF."
+            arg_type = Union{Number,AbstractString}
+            default = 3
+        "--numepoch", "-e"
+            help = "The number of epochs."
+            arg_type = Union{Number,AbstractString}
+            default = 5
+        "--chunksize", "-c"
+            help = "The number of rows reading at once (e.g. 5000)."
+            arg_type = Union{Number,AbstractString}
+            default = 1
+        "--lower"
+            help = "Stopping Criteria (When the relative change of error is below this value, the calculation is terminated)."
+            arg_type = Union{Number,AbstractString}
+            default = 0
+        "--upper"
+            help = "Stopping Criteria (When the relative change of error is above this value, the calculation is terminated)."
+            arg_type = Union{Number,AbstractString}
+            default = 1.0f+38
+        "--initU"
+            help = "The CSV file saving the initial values of factor matrix U."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+        "--initV"
+            help = "The CSV file saving the initial values of factor matrix V."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+        "--initL"
+            help = "The CSV file saving the initial values of graph Laplacian L."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+        "--logdir", "-l"
+            help = "The directory where intermediate files are saved, in every epoch."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+    end
 
-#     @add_arg_table s begin
-#         "--input", "-i"
-#             help = "Julia Binary file generated by `OnlineCCA.csv2bin` function."
-#             arg_type = AbstractString
-#             required = true
-#         "--outdir", "-o"
-#             help = "The directory specified the directory you want to save the result."
-#             arg_type = Union{Nothing,AbstractString}
-#             default = "."
-#             required = false
-#         "--scale"
-#             help = "{log,ftt,raw}-scaling of the value."
-#             arg_type = AbstractString
-#         "--pseudocount", "-p"
-#             help = "The number specified to avoid NaN by log10(0) and used when `Feature_LogMeans.csv` <log10(mean+pseudocount) value of each feature> is generated."
-#             arg_type = Union{Number,AbstractString}
-#         "--colmeanlist", "-m"
-#             help = "The mean of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--colvarlist", "-v"
-#             help = "The variance of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--dim", "-d"
-#             help = "The number of dimension of CCA."
-#             arg_type = Union{Number,AbstractString}
-#             default = 3
-#         "--numepoch", "-e"
-#             help = "The number of epoch."
-#             arg_type = Union{Number,AbstractString}
-#             default = 5
-#         "--lower"
-#             help = "Stopping Criteria (When the relative change of error is below this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 0
-#         "--upper"
-#             help = "Stopping Criteria (When the relative change of error is above this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f+38
-#         "--offsetStoch"
-#             help = "Off set value for avoding overflow when calculating stochastic gradient"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f-20
-#     end
+    return parse_args(s)
+end
 
-#     return parse_args(s)
-# end
+# Return N, M (Zstandard)
+function nm(input::AbstractString, nmfmodel::Union{NMF,DNMF})
+    N = zeros(UInt32, 1)
+    M = zeros(UInt32, 1)
+    open(input) do file
+        stream = ZstdDecompressorStream(file)
+        read!(stream, N)
+        read!(stream, M)
+        close(stream)
+    end
+    return N[], M[]
+end
 
-# # Parse command line options
-# function parse_commandline(cca::Union{GD,SGD,RSGD})
-#     s = ArgParseSettings()
+# Return N, M (Zstandard + Matrix Market)
+function nm(input::AbstractString, nmfmodel::Union{SPARSE_NMF,SPARSE_DNMF})
+    open(input, "r") do file
+        stream = ZstdDecompressorStream(file)
+        while !eof(stream)
+            line = readline(stream)
+            if !startswith(line, "%")
+                dims = parse.(Int, split(line))
+                close(stream)
+                return dims[1], dims[2]
+            end
+        end
+        close(stream)
+        error("Invalid Matrix Market file format: No valid header found")
+    end
+end
 
-#     @add_arg_table s begin
-#         "--input", "-i"
-#             help = "Julia Binary file generated by `OnlineCCA.csv2bin` function."
-#             arg_type = AbstractString
-#             required = true
-#         "--outdir", "-o"
-#             help = "The directory specified the directory you want to save the result."
-#             arg_type = Union{Nothing,AbstractString}
-#             default = "."
-#             required = false
-#         "--scale"
-#             help = "{log,ftt,raw}-scaling of the value."
-#             arg_type = AbstractString
-#         "--pseudocount", "-p"
-#             help = "The number specified to avoid NaN by log10(0) and used when `Feature_LogMeans.csv` <log10(mean+pseudocount) value of each feature> is generated."
-#             arg_type = Union{Number,AbstractString}
-#         "--colmeanlist", "-m"
-#             help = "The mean of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--colvarlist", "-v"
-#             help = "The variance of each row of matrix. The CSV file is generated by `OnlineCCA.sumr` functions."
-#             arg_type = AbstractString
-#             default = ""
-#             required = false
-#         "--dim", "-d"
-#             help = "The number of dimension of CCA."
-#             arg_type = Union{Number,AbstractString}
-#             default = 3
-#         "--stepsize", "-s"
-#             help = "The parameter used in every iteration."
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f3
-#         "--numepoch", "-e"
-#             help = "The number of epoch."
-#             arg_type = Union{Number,AbstractString}
-#             default = 5
-#         "--scheduling"
-#             help = "Learning parameter scheduling. `robbins-monro`, `momentum`, `nag`, and `adagrad` are available."
-#             arg_type = AbstractString
-#             default = "robbins-monro"
-#         "-g"
-#             help = "The parameter that is used when scheduling is specified as nag."
-#             arg_type = Union{Number,AbstractString}
-#             default = 0.9f0
-#         "--epsilon"
-#             help = "The parameter that is used when scheduling is specified as adagrad."
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f-8
-#         "--lower"
-#             help = "Stopping Criteria (When the relative change of error is below this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 0
-#         "--upper"
-#             help = "Stopping Criteria (When the relative change of error is above this value, the calculation is terminated)"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f+38
-#         "--evalfreq"
-#             help = "Evaluation Frequency of Reconstruction Error"
-#             arg_type = Union{Number,AbstractString}
-#             default = 5000
-#         "--offsetFull"
-#             help = "Off set value for avoding overflow when calculating full gradient"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f-20
-#         "--offsetStoch"
-#             help = "Off set value for avoding overflow when calculating stochastic gradient"
-#             arg_type = Union{Number,AbstractString}
-#             default = 1.0f-20
-#         "--initW"
-#             help = "The CSV file saving the initial values of eigenvectors."
-#             arg_type = Union{Nothing,AbstractString,}
-#             default = nothing
-#         "--logdir", "-l"
-#             help = "The directory where intermediate files are saved, in every evalfreq (e.g. 5000) iteration."
-#             arg_type = Union{Nothing,AbstractString}
-#             default = nothing
-#         "--perm"
-#             help = "Whether the data matrix is shuffled at random"
-#             arg_type = Union{Bool,AbstractString}
-#             default = false
-#     end
+# Output log file
+function outputlog(s::Number, input::AbstractString, logdir::AbstractString, U::AbstractArray, V::AbstractArray, lower::Number, upper::Number, nmfmodel::Union{NMF,DNMF})
+    stop = 0
+    E = RecError(input, U, V, nmfmodel)
+    if s != 1
+        old_E = read_csv(joinpath(logdir, "RecError_Epoch"*string(s-1)*".csv"))
+        RelChange = abs(E - Float32(old_E[1,2])) / E
+        E = ["RecError" => E, "RelChange" => RelChange]
+        if RelChange < lower
+            println("Relative change of reconstruction error is below the lower value (no change)")
+            stop = 1
+        end
+        if RelChange > upper
+            println("Relative change of reconstruction error is above the upper value (unstable)")
+            stop = 2
+        end
+    else
+        E = ["RecError" => E]
+    end
+    write_csv(joinpath(logdir, "RecError_Epoch"*string(s)*".csv"), E)
+    write_csv(joinpath(logdir, "U_Epoch"*string(s)*".csv"), U)
+    write_csv(joinpath(logdir, "V_Epoch"*string(s)*".csv"), V)
+    return stop
+end
 
-#     return parse_args(s)
-# end
-
-# # Return N, M
-# function nm(input::AbstractArray)
-#     l = length(input)
-#     N = zeros(UInt32, l)
-#     M = zeros(UInt32, l)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     for i=1:l
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             N[i] = tmpN[1]
-#             read!(stream, tmpM)
-#             M[i] = tmpM[1]
-#             close(stream)
-#         end
-#     end
-#     return N, M
-# end
-
-# # Initialization
-# function init(input::AbstractArray, pseudocount::AbstractArray, dim::Number, colmeanlist::AbstractArray, colvarlist::Union{Nothing,AbstractString,AbstractArray}, initW::Union{Nothing,AbstractArray}, cca::Union{OOCMCCA}, offsetStoch::Number, scale::AbstractArray)
-#     if !(length(input) >= 2)
-#         error("Please specify the input as length-2 or longer array (e.g. [\"X.zst\", \"Y.zst\", \"Z.zst\"]).")
-#     end
-#     check1 = length(input) == length(pseudocount)
-#     check2 = length(input) == length(colmeanlist)
-#     check3 = true
-#     if !(colvarlist == "")
-#         check3 = length(input) == length(colvarlist)
-#     end
-#     check4 = length(input) == length(scale)
-#     if !(check1 && check2 && check3 && check4)
-#         error("The length of vectors input, pseudocount, colmeanlist, colvarlist, and scale have to be same.")
-#     end
-#     N, M = nm(input)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     l = length(input)
-#     tmppseudocount = zeros(Float32, l)
-#     for i=1:l
-#         tmppseudocount[i] = Float32(pseudocount[i])
-#     end
-#     pseudocount = tmppseudocount
-#     offsetStoch = Float32(offsetStoch)
-#     W = Any[]
-#     if initW != nothing
-#         for i=1:l
-#             tmpW = readcsv(initW[i], Float32)
-#             push!(W, tmpW) # Eigen vectors
-#         end
-#     end
-#     v = Any[]
-#     D = Any[]
-#     colmeanvec = Any[]
-#     colvarvec = Any[]
-#     for i=1:l
-#         push!(v, zeros(Float32, M[i], dim)) # Temporal Vector (Same length
-#         if initW == nothing
-#             tmpW = zeros(Float32, M[i], dim)
-#             for j=1:dim
-#                 tmpW[(i-1)*dim+j, j] = 1
-#             end
-#             push!(W, tmpW) # Eigen vectors
-#         end
-#         push!(D, Diagonal(reverse(1:dim))) # Diagonaml Matrix
-#         push!(colmeanvec, readcsv(colmeanlist[i], Float32))
-#         if length(colvarlist) != 0
-#             push!(colvarvec, readcsv(colvarlist[i], Float32))
-#         else
-#             push!(colvarvec, zeros(Float32, N[i], 1))
-#         end
-#     end
-#     if colvarlist == ""
-#         colvarlist=Any[]
-#         for i=1:l
-#             push!(colvarlist, "")
-#         end
-#     end
-#     TotalCorVar = zeros(Float32, l)
-#     for i=1:l
-#         x = zeros(UInt32, M[i])
-#         normx = zeros(Float32, M[i])
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             read!(stream, tmpM)
-#             for n = 1:N[i]
-#                 # Data Import
-#                 read!(stream, x)
-#                 normx = normalizex(x, n, stream, scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#                 TotalCorVar[i] = TotalCorVar[i] .+ (normx'normx)[1]
-#             end
-#             close(stream)
-#         end
-#         TotalCorVar[i] = TotalCorVar[i] / M[i]
-#     end
-#     return pseudocount, W, v, D, colmeanlist, colmeanvec, colvarlist, colvarvec, N, M, TotalCorVar, offsetStoch
-# end
-
-# # Initialization
-# function init(input::AbstractArray, pseudocount::AbstractArray, dim::Number, colmeanlist::AbstractArray, colvarlist::Union{Nothing,AbstractString,AbstractArray}, initW::Union{Nothing,AbstractArray}, logdir::Union{Nothing,AbstractString}, cca::Union{HORST,ORTHITER}, lower::Number, upper::Number, evalfreq::Number, offsetStoch::Number, scale::AbstractArray)
-#     if !(length(input) >= 2)
-#         error("Please specify the input as length-2 or longer array (e.g. [\"X.zst\", \"Y.zst\", \"Z.zst\"]).")
-#     end
-#     check1 = length(input) == length(pseudocount)
-#     check2 = length(input) == length(colmeanlist)
-#     check3 = true
-#     if !(colvarlist == "")
-#         check3 = length(input) == length(colvarlist)
-#     end
-#     check4 = length(input) == length(scale)
-#     if !(check1 && check2 && check3 && check4)
-#         error("The length of vectors input, pseudocount, colmeanlist, colvarlist, and scale have to be same.")
-#     end
-#     N, M = nm(input)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     l = length(input)
-#     tmppseudocount = zeros(Float32, l)
-#     for i=1:l
-#         tmppseudocount[i] = Float32(pseudocount[i])
-#     end
-#     pseudocount = tmppseudocount
-#     lower = Float32(lower)
-#     upper = Float32(upper)
-#     evalfreq = Int64(evalfreq)
-#     offsetStoch = Float32(offsetStoch)
-#     W = Any[]
-#     if initW != nothing
-#         for i=1:l
-#             tmpW = readcsv(initW[i], Float32)
-#             push!(W, tmpW) # Eigen vectors
-#         end
-#     end
-#     v = Any[]
-#     D = Any[]
-#     colmeanvec = Any[]
-#     colvarvec = Any[]
-#     for i=1:l
-#         push!(v, zeros(Float32, M[i], dim)) # Temporal Vector (Same length
-#         if initW == nothing
-#             tmpW = zeros(Float32, M[i], dim)
-#             for j=1:dim
-#                 tmpW[(i-1)*dim+j, j] = 1
-#             end
-#             push!(W, tmpW) # Eigen vectors
-#         end
-#         push!(D, Diagonal(reverse(1:dim))) # Diagonaml Matrix
-#         push!(colmeanvec, readcsv(colmeanlist[i], Float32))
-#         if length(colvarlist) != 0
-#             push!(colvarvec, readcsv(colvarlist[i], Float32))
-#         else
-#             push!(colvarvec, zeros(Float32, N[i], 1))
-#         end
-#     end
-#     if colvarlist == ""
-#         colvarlist=Any[]
-#         for i=1:l
-#             push!(colvarlist, "")
-#         end
-#     end
-#     TotalCorVar = zeros(Float32, l)
-#     for i=1:l
-#         x = zeros(UInt32, M[i])
-#         normx = zeros(Float32, M[i])
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             read!(stream, tmpM)
-#             for n = 1:N[i]
-#                 # Data Import
-#                 read!(stream, x)
-#                 normx = normalizex(x, n, stream, scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#                 TotalCorVar[i] = TotalCorVar[i] .+ (normx'normx)[1]
-#             end
-#             close(stream)
-#         end
-#         TotalCorVar[i] = TotalCorVar[i] / M[i]
-#     end
-#     # directory for log file
-#     if logdir isa String
-#         if !isdir(logdir)
-#             mkdir(logdir)
-#         end
-#     end
-#     return pseudocount, W, v, D, colmeanlist, colmeanvec, colvarlist, colvarvec, N, M, TotalCorVar, lower, upper, evalfreq, offsetStoch
-# end
-
-# # Initialization
-# function init(input::AbstractArray, pseudocount::AbstractArray, dim::Number, colmeanlist::AbstractArray, colvarlist::Union{Nothing,AbstractString,AbstractArray}, cca::NIPALS, lower::Number, upper::Number, offsetStoch::Number, scale::AbstractArray)
-#     if !(length(input) == 2)
-#         error("Please specify the input as length-2 array (e.g. [\"X.zst\", \"Y.zst\"]).")
-#     end
-#     check1 = length(input) == length(pseudocount)
-#     check2 = length(input) == length(colmeanlist)
-#     check3 = true
-#     if !(colvarlist == "")
-#         check3 = length(input) == length(colvarlist)
-#     end
-#     check4 = length(input) == length(scale)
-#     if !(check1 && check2 && check3 && check4)
-#         error("The length of vectors input, pseudocount, colmeanlist, colvarlist, and scale have to be same.")
-#     end
-#     N, M = nm(input)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     l = length(input)
-#     tmppseudocount = zeros(Float32, l)
-#     for i=1:l
-#         tmppseudocount[i] = Float32(pseudocount[i])
-#     end
-#     pseudocount = tmppseudocount
-#     lower = Float32(lower)
-#     upper = Float32(upper)
-#     offsetStoch = Float32(offsetStoch)
-#     W = Any[]
-#     v = Any[]
-#     D = Any[]
-#     colmeanvec = Any[]
-#     colvarvec = Any[]
-#     for i=1:l
-#         push!(v, zeros(Float32, M[i], dim)) # Temporal Vector (Same length
-#         tmpW = zeros(Float32, M[i], dim)
-#         for j=1:dim
-#             tmpW[(i-1)*dim+j, j] = 1
-#         end
-#         push!(W, tmpW) # Eigen vectors
-#         push!(D, Diagonal(reverse(1:dim))) # Diagonaml Matrix
-#         push!(colmeanvec, readcsv(colmeanlist[i], Float32))
-#         if length(colvarlist) != 0
-#             push!(colvarvec, readcsv(colvarlist[i], Float32))
-#         else
-#             push!(colvarvec, zeros(Float32, N[i], 1))
-#         end
-#     end
-#     if colvarlist == ""
-#         colvarlist=Any[]
-#         for i=1:l
-#             push!(colvarlist, "")
-#         end
-#     end
-#     TotalCorVar = zeros(Float32, l)
-#     for i=1:l
-#         x = zeros(UInt32, M[i])
-#         normx = zeros(Float32, M[i])
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             read!(stream, tmpM)
-#             for n = 1:N[i]
-#                 # Data Import
-#                 read!(stream, x)
-#                 normx = normalizex(x, n, stream, scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#                 TotalCorVar[i] = TotalCorVar[i] .+ (normx'normx)[1]
-#             end
-#             close(stream)
-#         end
-#         TotalCorVar[i] = TotalCorVar[i] / M[i]
-#     end
-#     return pseudocount, W, v, D, colmeanlist, colmeanvec, colvarlist, colvarvec, N, M, TotalCorVar, lower, upper, offsetStoch
-# end
-
-# # Initialization
-# function init(input::AbstractArray, pseudocount::AbstractArray, stepsize::Number, g::Number, epsilon::Number, dim::Number, colmeanlist::AbstractArray, colvarlist::Union{AbstractString,AbstractArray}, initW::Union{Nothing,AbstractArray}, logdir::Union{Nothing,AbstractString}, cca::Union{GD,SGD,RSGD}, lower::Number, upper::Number, evalfreq::Number, offsetFull::Number, offsetStoch::Number, scale::AbstractArray)
-# 	if !(length(input) >= 2)
-#         error("Please specify the input as length-2 or longer array (e.g. [\"X.zst\",\"Y.zst\",\"Z.zst\"]).")
-# 	end
-#     check1 = length(input) == length(pseudocount)
-#     check2 = length(input) == length(colmeanlist)
-#     check3 = true
-#     if !(colvarlist == "")
-#         check3 = length(input) == length(colvarlist)
-#     end
-#     check4 = length(input) == length(scale)
-#     if !(check1 && check2 && check3 && check4)
-#         error("The length of vectors input, pseudocount, colmeanlist, colvarlist, and scale have to be same.")
-#     end
-#     N, M = nm(input)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     l = length(input)
-#     tmppseudocount = zeros(Float32, l)
-#     for i=1:l
-#         tmppseudocount[i] = Float32(pseudocount[i])
-#     end
-#     pseudocount = tmppseudocount
-#     stepsize = Float32(stepsize)
-#     g = Float32(g)
-#     epsilon = Float32(epsilon)
-#     lower = Float32(lower)
-#     upper = Float32(upper)
-#     evalfreq = Int64(evalfreq)
-#     offsetFull = Float32(offsetFull)
-#     offsetStoch = Float32(offsetStoch)
-#     W = Any[]
-#     if initW != nothing
-#         for i=1:l
-#             tmpW = readcsv(initW[i], Float32)
-#             push!(W, tmpW) # Eigen vectors
-#         end
-#     end
-#     v = Any[]
-#     D = Any[]
-#     colmeanvec = Any[]
-#     colvarvec = Any[]
-#     for i=1:l
-#         push!(v, zeros(Float32, M[i], dim)) # Temporal Vector (Same length
-#         tmp = zeros(Float32, M[i], dim)
-#         for j=1:dim
-#             tmp[j, j] = 1
-#         end
-#         if initW == nothing
-#             push!(W, tmp) # Eigen vectors
-#         end
-#         push!(D, Diagonal(reverse(1:dim))) # Diagonaml Matrix
-#         push!(colmeanvec, readcsv(colmeanlist[i], Float32))
-#         if length(colvarlist) != 0
-#             push!(colvarvec, readcsv(colvarlist[i], Float32))
-#         else
-#             push!(colvarvec, zeros(Float32, N[i], 1))
-#         end
-#     end
-#     if colvarlist == ""
-#         colvarlist=Any[]
-#         for i=1:l
-#             push!(colvarlist, "")
-#         end
-#     end
-#     TotalCorVar = zeros(Float32, l)
-#     for i=1:l
-#         x = zeros(UInt32, M[i])
-#         normx = zeros(Float32, M[i])
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             read!(stream, tmpM)
-#             for n = 1:N[i]
-#                 # Data Import
-#                 read!(stream, x)
-#                 normx = normalizex(x, n, stream, scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#                 TotalCorVar[i] = TotalCorVar[i] .+ (normx'normx)[1]
-#             end
-#             close(stream)
-#         end
-#         TotalCorVar[i] = TotalCorVar[i] / M[i]
-#     end
-#     # directory for log file
-#     if logdir isa String
-#         if !isdir(logdir)
-#             mkdir(logdir)
-#         end
-#     end
-#     return pseudocount, stepsize, g, epsilon, W, v, D, colmeanlist, colmeanvec, colvarlist, colvarvec, N, M, TotalCorVar, lower, upper, evalfreq, offsetFull, offsetStoch
-# end
-
-# # Eigen value, Loading
-# function WλV(W::AbstractArray, input::AbstractArray, dim::Number, scale::AbstractArray, pseudocount::AbstractArray, colmeanlist::AbstractArray, colmeanvec::AbstractArray, colvarlist::AbstractArray, colvarvec::AbstractArray, TotalCorVar::AbstractArray)
-#     N, M = nm(input)
-#     l = length(W)
-#     λ = Any[]
-#     V = Any[]
-#     x = Any[]
-#     normx = Any[]
-#     for i=1:l
-#         push!(V, zeros(N[i], dim))
-#         push!(x, zeros(UInt32, M[i]))
-#         push!(normx, zeros(UInt32, M[i]))
-#     end
-#     ExpCorCov = zeros(Float32, l)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     Objective = Any[]
-#     AvgLatentCor = Any[]
-#     for i=1:l
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             read!(stream, tmpM)
-#             for n=1:N[i]
-#                 # Data Import
-#                 read!(stream, x[i])
-#                 normx[i] = normalizex(x[i], n, stream, scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#                 V[i][n, :] = normx[i]'W[i]
-#             end
-#             close(stream)
-#         end
-#         # Eigen value
-#         σ = Float32[norm(V[i][:, x]) for x=1:dim]
-#         for n = 1:dim
-#             V[i][:, n] ./= σ[n]
-#         end
-#         push!(λ, σ .* σ ./ M[i])
-#         # Sort by Eigen value
-#         idx = sortperm(λ[i], rev=true)
-#         W[i] .= W[i][:, idx]
-#         λ[i] .= λ[i][idx]
-#         V[i] .= V[i][:, idx]
-#         ExpCorCov[i] = sum(λ[i]) / TotalCorVar[i]
-#     end
-#     # The value of objective function/The correletion between latent variables
-#     for i=1:l
-#         for j=1:l
-#             if i != j
-#                 push!(Objective, sum(diag(V[i]'V[j])))
-#                 tmpAvgLatentCor = 0.0
-#                 for k=1:dim
-#                     tmpAvgLatentCor += cor(V[i][:,k].+1e-10, V[j][:,k].+1e-10)
-#                 end
-#                 push!(AvgLatentCor, tmpAvgLatentCor/(dim*(l-1)))
-#             end
-#         end
-#     end
-#     # Return
-#     return W, λ, V, ExpCorCov, TotalCorVar, Objective, AvgLatentCor
-# end
-
-# # Output log file （only GD）
-# function outputlog(s::Number, input::AbstractArray, dim::Number, logdir::AbstractString, W::AbstractArray, cca::GD, TotalCorVar::AbstractArray, scale::AbstractArray, pseudocount::AbstractArray, colmeanlist::AbstractArray, colmeanvec::AbstractArray, colvarlist::AbstractArray, colvarvec::AbstractArray, lower::Number, upper::Number, stop::Number)
-#     REs = RecError(W, input, TotalCorVar, scale, pseudocount, colmeanlist, colmeanvec, colvarlist, colvarvec, dim)
-#     l = length(W)
-#     RelChange = Any[]
-#     for i = 1:l
-#         outREs = ["E"=>REs[1][2][i], "AE"=>REs[2][2][i],
-#         "RMSE"=>REs[3][2][i], "ARE"=>REs[4][2][i],
-#         "Explained Correlation/Covariance"=>REs[5][2][i],
-#         "Total Correlation/Variance"=>REs[6][2][i],
-#         "Objective"=> REs[7][2][i], "AvgLatentCor"=> REs[8][2][i]]
-#         writecsv(joinpath(logdir, "RecError_Epoch"*string(s)*"_"*string(i)*".csv"), outREs)
-#         writecsv(joinpath(logdir, "W_Epoch"*string(s)*"_"*string(i)*".csv"), W[i])
-#     end
-#     if s != 1
-#         for i = 1:l
-#             old_Objective = readcsv(joinpath(logdir, "RecError_Epoch"*string(s-1)*"_"*string(i)*".csv"))
-#             push!(RelChange, abs(REs[7][2][i] - old_Objective[7,2]) / abs(REs[7][2][i]))
-#         end
-#         if sum(RelChange) < lower
-#             println("Relative change of reconstruction error is below the lower value (no change)")
-#             stop = 1
-#         end
-#         if sum(RelChange) > upper
-#             println("Relative change of reconstruction error is above the upper value (unstable)")
-#             stop = 2
-#         end
-#     end
-#     return stop
-# end
-
-# # Output log file (other CCA)
-# function outputlog(N::AbstractArray, s::Number, n::Number, input::AbstractArray, dim::Number, logdir::AbstractString, W::AbstractArray, cca::Union{SGD,RSGD}, TotalCorVar::AbstractArray, scale::AbstractArray, pseudocount::AbstractArray, colmeanlist::AbstractArray, colmeanvec::AbstractArray, colvarlist::AbstractArray, colvarvec::AbstractArray, lower::Number, upper::Number, stop::Number, evalfreq::Number)
-#     if(mod((N[1]*(s-1)+n), evalfreq) == 0)
-#         REs = RecError(W, input, TotalCorVar, scale, pseudocount, colmeanlist, colmeanvec, colvarlist, colvarvec, dim)
-#         l = length(W)
-#         RelChange = Any[]
-#         for i = 1:l
-#             outREs = ["E"=>REs[1][2][i], "AE"=>REs[2][2][i],
-#             "RMSE"=>REs[3][2][i], "ARE"=>REs[4][2][i],
-#             "Explained Correlation/Covariance"=>REs[5][2][i],
-#             "Total Correlation/Variance"=>REs[6][2][i],
-#             "Objective"=> REs[7][2][i], "AvgLatentCor"=> REs[8][2][i]]
-#             writecsv(joinpath(logdir, "RecError_"*string((N[1]*(s-1)+n))*"_"*string(i)*".csv"), outREs)
-#             writecsv(joinpath(logdir, "W_"*string((N[1]*(s-1)+n))*"_"*string(i)*".csv"), W[i])
-#         end
-
-#         if n != evalfreq && (N[1]*(s-1)+(n-evalfreq)) != 0
-#             for i = 1:l
-#                 old_Objective = readcsv(joinpath(logdir, "RecError_"*string((N[1]*(s-1)+(n-evalfreq)))*"_"*string(i)*".csv"))
-#                 push!(RelChange, abs(REs[7][2][i] - old_Objective[7,2]) / abs(REs[7][2][i]))
-#             end
-#             if sum(RelChange) < lower
-#                 println("Relative change of reconstruction error is below the lower value (no change)")
-#                 stop = 1
-#             end
-#             if sum(RelChange) > upper
-#                 println("Relative change of reconstruction error is above the upper value (unstable)")
-#                 stop = 2
-#             end
-#         end
-#     end
-#     return stop
-# end
-
-# # Reconstuction Error
-# function RecError(W::AbstractArray, input::AbstractArray, TotalCorVar::AbstractArray, scale::AbstractArray, pseudocount::AbstractArray, colmeanlist::AbstractArray, colmeanvec::AbstractArray, colvarlist::AbstractArray, colvarvec::AbstractArray, dim::Number)
-#     N, M = nm(input)
-#     l = length(W)
-#     λ = Any[]
-#     V = Any[]
-#     x = Any[]
-#     normx = Any[]
-#     for i=1:l
-#         push!(V, zeros(N[i], dim))
-#         push!(x, zeros(UInt32, M[i]))
-#         push!(normx, zeros(UInt32, M[i]))
-#     end
-#     ExpCorCov = zeros(Float32, l)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     Objective = Any[]
-#     AvgLatentCor = Any[]
-#     E = zeros(Float32, l)
-#     AE = zeros(Float32, l)
-#     RMSE = zeros(Float32, l)
-#     ARE = zeros(Float32, l)
-#     for i=1:l
-#         open(input[i]) do file
-#             stream = ZstdDecompressorStream(file)
-#             read!(stream, tmpN)
-#             read!(stream, tmpM)
-#             for n = 1:N[i]
-#                 # Data Import
-#                 read!(stream, x[i])
-#                 normx[i] = normalizex(x[i], n, stream, scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#                 pc = W[i]'normx[i]
-#                 E[i] = E[i] + dot(normx[i], normx[i]) - dot(pc, pc)
-#                 V[i][n, :] = pc
-#             end
-#             close(stream)
-#         end
-#         # Eigen value
-#         σ = Float32[norm(V[i][:, x]) for x=1:dim]
-#         for n = 1:dim
-#             V[i][:, n] ./= σ[n]
-#         end
-#         push!(λ, σ .* σ ./ M[i])
-#         # Sort by Eigen value
-#         idx = sortperm(λ[i], rev=true)
-#         W[i] .= W[i][:, idx]
-#         λ[i] .= λ[i][idx]
-#         V[i] .= V[i][:, idx]
-#         ExpCorCov[i] = sum(λ[i]) / TotalCorVar[i]
-#         ExpCorCov[i] = sum(λ[i]) / TotalCorVar[i]
-#         AE[i] = E[i] / M[i]
-#         RMSE[i] = sqrt(E[i] / (N[i] * M[i]))
-#         ARE[i] = sqrt(E[i] / TotalCorVar[i])
-#         @assert E[i] isa Float32
-#         @assert AE[i] isa Float32
-#         @assert RMSE[i] isa Float32
-#         @assert ARE[i] isa Float32
-#     end
-#     # The value of objective function/The correletion between latent variables
-#     for i=1:l
-#         tmpObjective = 0.0
-#         tmpAvgLatentCor = 0.0
-#         for j=1:l
-#             if i != j
-#                 tmpObjective += sum(diag(V[i]'V[j]))
-#                 for k=1:dim
-#                     tmpAvgLatentCor += cor(V[i][:,k].+1e-10, V[j][:,k].+1e-10)
-#                 end
-#             end
-#         end
-#         push!(Objective, tmpObjective)
-#         push!(AvgLatentCor, tmpAvgLatentCor/(dim*(l-1)))
-#     end
-#     # Return
-#     return ["E"=>E, "AE"=>AE, "RMSE"=>RMSE, "ARE"=>ARE, "Explained Correlation/Covariance"=>ExpCorCov, "Total Correlation/Variance"=>TotalCorVar, "Objective"=> Objective, "AvgLatentCor"=> AvgLatentCor]
-# end
-
-# # Row vector
-# function normalizex(x::Array{UInt32,1}, n::Number, stream, scale::AbstractString, pseudocount::Number, colmeanlist::AbstractString, colmeanvec::AbstractArray, colvarlist::AbstractString, colvarvec::AbstractArray)
-#     # Input
-#     if !(scale in ["log", "ftt", "raw"])
-#         error("scale must be specified as log, ftt, or raw")
-#     end
-
-#     # Logscale, FTTscale, Raw
-#     if scale == "log"
-#         pc = UInt32(pseudocount)
-#         xx = Vector{Float32}(undef, length(x))
-#         @inbounds for i in 1:length(x)
-#             xx[i] = log10.(x[i] .+ pc)
-#         end
-#     end
-#     if scale == "ftt"
-#         xx = Vector{Float32}(undef, length(x))
-#         @inbounds for i in 1:length(x)
-#             xx[i] = sqrt.(x[i]) .+ sqrt.(x[i] .+ 1.0f0)
-#         end
-#     end
-#     if scale == "raw"
-#         xx = convert(Vector{Float32}, x)
-#     end
-
-#     # Centering, Normalization
-#     if (colmeanlist != "") && (colvarlist == "")
-#         xx = xx .- colmeanvec
-#     end
-#     if (colmeanlist != "") && (colvarlist != "")
-#         xx = xx .- colmeanvec ./ colvarvec
-#     end
-#     # Return
-#     return xx
-# end
-
-# # Full Gradient
-# function ∇f(W::AbstractArray, input::AbstractArray, D::AbstractArray, scale::AbstractArray, pseudocount::AbstractArray, colmeanlist::AbstractArray, colmeanvec::AbstractArray, colvarlist::AbstractArray, colvarvec::AbstractArray, stepsize::Number, offsetFull::Number, offsetStoch::Number, perm::Bool)
-#     N, M = nm(input)
-#     tmpN = zeros(UInt32, 1)
-#     tmpM = zeros(UInt32, 1)
-#     l = length(input)
-#     tmpW = Any[]
-#     x = Any[]
-#     normx = Any[]
-#     for i=1:l
-#         push!(tmpW, zeros(Float32, size(W[i])))
-#         push!(x, zeros(UInt32, M[i]))
-#         push!(normx, zeros(Float32, M[i]))
-#     end
-#     stream = Any[]
-#     # Stream
-#     for i=1:l
-#         push!(stream, ZstdDecompressorStream(open(input[i])))
-#     end
-#     # tmpN, tmpN
-#     for i=1:l
-#         read!(stream[i], tmpN)
-#         read!(stream[i], tmpM)
-#     end
-#     # x, norm
-#     for n=1:N[1]
-#         for i=1:l
-#             read!(stream[i], x[i])
-#             normx[i] = normalizex(x[i], n, stream[i], scale[i], pseudocount[i], colmeanlist[i], colmeanvec[i], colvarlist[i], colvarvec[i])
-#             if perm
-#                 normx[i] .= normx[randperm(length(normx[i]))]
-#             end
-#         end
-#         for i=1:l
-#             # Full Gradient
-#             tmpW[i] .+= offsetFull * ∇fn(i, W, normx, D, M, stepsize, offsetStoch)
-#         end
-#     end
-#     # GD
-#     for i=1:l
-#         W[i] .= tmpW[i] / offsetFull
-#     end
-#     # close
-#     for i=1:l
-#         close(stream[i])
-#     end
-#     return W
-# end
-
-# # Stochastic Gradient
-# function ∇fn(i::Number, W::AbstractArray, x::AbstractArray, D::AbstractArray, M::AbstractArray, stepsize::Number, offsetStoch::Number)
-#     l = length(W)
-#     tmp∇fn = zeros(Float32, size(W[i]))
-#     for j=1:l
-#         if i != j
-#             tmp∇fn .= x[i] * (offsetStoch * x[j]'W[j] * D[j])
-#         end
-#     end
-#     return 1/offsetStoch * stepsize * tmp∇fn * Float32(2 / M[i])
-# end
-
-# # sym
-# function sym(Y::AbstractArray)
-#     return (Y + Y') / 2
-# end
-
-# # Riemannian Gradient
-# function Pw(Z::AbstractArray, W::AbstractArray)
-#     l = length(W)
-#     out = Any[]
-#     for i=1:l
-#         push!(out, Z[i] - W[i] * sym(W[i]'Z[i]))
-#     end
-#     return out
-# end
-
-# # Retraction
-# function Retraction(W::AbstractArray)
-#     l = length(W)
-#     for i=1:l
-#         W[i] = Array(qr!(W[i]).Q)
-#     end
-#     return W
-# end
+# Reconstuction Error
+function RecError(input::AbstractString, U::AbstractArray, V::AbstractArray,     nmfmodel::Union{NMF,DNMF})
+    N, M = nm(input, nmfmodel)
+    tmpN = zeros(UInt32, 1)
+    tmpM = zeros(UInt32, 1)
+    x = zeros(UInt32, M)
+    E = 0.0f0
+    open(input) do file
+        stream = ZstdDecompressorStream(file)
+        read!(stream, tmpN)
+        read!(stream, tmpM)
+        for n = 1:N
+            # Data Import
+            read!(stream, x)
+            E += Float32(sum((x' - U[n:n, :] * V').^2))
+        end
+        close(stream)
+    end
+    @assert E isa Float32
+    # Return
+    return E
+end

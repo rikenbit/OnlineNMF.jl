@@ -1,0 +1,104 @@
+using OnlineNMF
+using ArgParse:
+    ArgParseSettings, parse_args, @add_arg_table
+
+# main
+function main()
+    nmf = OnlineNMF.NMF()
+    parsed_args = OnlineNMF.parse_commandline_nmf(nmf)
+    println("Parsed args:")
+    for (arg, val) in parsed_args
+        println("  $arg  =>  ", repr(val))
+    end
+
+    if parsed_args["pseudocount"] == 1.0f0
+        pseudocount = 1.0f0
+    else
+        pseudocount=parse(Float32, parsed_args["pseudocount"])
+    end
+
+    alpha=parse(Int64, parsed_args["alpha"])
+
+    beta=parse(Int64, parsed_args["beta"])
+
+    L1_U=parse(Float32, parsed_args["L1_U"])
+
+    L1_V=parse(Float32, parsed_args["L1_V"])
+
+    L2_U=parse(Float32, parsed_args["L2_U"])
+
+    L2_V=parse(Float32, parsed_args["L2_V"])
+
+    dim=parse(Int64, parsed_args["dim"])
+
+    if parsed_args["numepoch"] == 5
+        numepoch = 5
+    else
+        numepoch=parse(Int64, parsed_args["numepoch"])
+    end
+
+    if parsed_args["lower"] == 0
+        lower = 0
+    else
+        lower=parse(Float32, parsed_args["lower"])
+    end
+
+    if parsed_args["upper"] == 1.0f+38
+        upper = 1.0f+38
+    else
+        upper=parse(Float32, parsed_args["upper"])
+    end
+
+    if parsed_args["evalfreq"] == 5000
+        evalfreq = 5000
+    else
+        evalfreq=parse(Int64, parsed_args["evalfreq"])
+    end
+
+    if parsed_args["initU"] == nothing
+        initU = parsed_args["initU"]
+    else
+        initU = String(parsed_args["initU"])
+    end
+
+    if parsed_args["initV"] == nothing
+        initV = parsed_args["initV"]
+    else
+        initV = String(parsed_args["initV"])
+    end
+
+    if parsed_args["logdir"] == nothing
+        logdir = parsed_args["logdir"]
+    else
+        logdir = String(parsed_args["logdir"])
+    end
+
+    if parsed_args["perm"] == false
+        perm = false
+    elseif parsed_args["perm"] == "true"
+        perm = true
+    else
+        error("Please specify the perm option as true or false")
+    end
+
+    out = OnlineNMF.nmf(input=parsed_args["input"],
+        pseudocount=pseudocount,
+        alpha=alpha,
+        beta=beta,
+        L1_U=L1_U,
+        L1_V=L1_V,
+        L2_U=L2_U,
+        L2_V=L2_V,
+        dim=dim,
+        numepoch=numepoch,
+        lower=lower,
+        upper=upper,
+        evalfreq=evalfreq,
+        initU=initU,
+        initV=initV,
+        logdir=logdir,
+        perm=perm)
+    OnlineNMF.output(parsed_args["outdir"], out)
+end
+
+main()

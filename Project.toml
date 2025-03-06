@@ -1,0 +1,14 @@
+name = "OnlineNMF"
+uuid = "e0c94d91-d830-4516-8b46-9a113d37a394"
+authors = ["kokitsuyuzaki <k.t.the-answer@hotmail.co.jp>"]
+version = "0.1.0"
+
+[deps]
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+CodecZstd = "6b39b394-51ab-5f42-8807-6242bab2b4c2"
+
+[compat]
+julia = "1"
