@@ -16,16 +16,13 @@ using SparseArrays:
     sparse
 using LoopVectorization:
     @view, @turbo
-using Base.Threads
 
-export output, parse_commandline, nmf, dnmf
+export output, parse_commandline, nmf, dnmf, sparse_nmf, sparse_dnmf, graph_laplacian
 
 include("Utils.jl")
 include("nmf.jl")
 include("dnmf.jl")
-include("gdnmf.jl")
 include("sparse_nmf.jl")
 include("sparse_dnmf.jl")
-include("sparse_gdnmf.jl")
 
 end

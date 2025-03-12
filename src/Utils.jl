@@ -6,8 +6,26 @@ struct SPARSE_DNMF end
 struct ALPHA end
 struct BETA end
 
+# Graph Laplacian for graph-regularized NMF
+check_symmetric(A::AbstractArray) = isapprox(A, A', atol=1e-8)
+
+function graph_laplacian(A::AbstractArray, norm::Bool=true)
+    if check_symmetric(A)
+        if norm
+            D = Diagonal(sum(A, dims=1)[:])
+            return D^(-0.5) * A * D^(-0.5)
+        else
+            D = Diagonal(sum(A, dims=1)[:])
+            return D - A
+        end
+    else
+        error("The adjacency matrix must be symmetric")
+    end
+end
+
+# Helper functions
 function load_or_zero(init, nums)
-    if init == nothing
+    if init === nothing
         return zeros(nums, nums)
     elseif init isa String
         mat = read_csv(init, Float32)
@@ -17,15 +35,19 @@ function load_or_zero(init, nums)
     end
 end
 
-function load_or_random(init, rows, cols)
-    if init == nothing
-        return rand(Float32, rows, cols)
+function load_or_random(init, rows, cols, asym::Bool=false)
+    if init === nothing
+        mat = rand(Float32, rows, cols)
     elseif init isa String
         mat = read_csv(init, Float32)
-        return mat[:, 1:cols]
+        mat = mat[:, 1:cols]
     else
         error("Invalid input for initialization")
     end
+    if asym
+        mat = (mat + mat') / 2
+    end
+    return mat
 end
 
 # Algorithm Selection
@@ -120,6 +142,10 @@ function parse_commandline(nmfmodel::Union{NMF,SPARSE_NMF})
             help = "The parameter of Beta-divergence."
             arg_type = Union{Number,AbstractString}
             default = 2
+        "--graphv",
+            help = "Graph regularization parameter for the factor matrix V."
+            arg_type = Union{Number,AbstractString}
+            default = eps(Float32)
         "--l1u",
             help = "L1-regularization parameter for the factor matrix U."
             arg_type = Union{Number,AbstractString}
@@ -162,6 +188,10 @@ function parse_commandline(nmfmodel::Union{NMF,SPARSE_NMF})
             default = nothing
         "--initV"
             help = "The CSV file saving the initial values of factor matrix V."
+            arg_type = Union{Nothing,AbstractString}
+            default = nothing
+        "--initL"
+            help = "The CSV file saving the initial values of graph Laplacian L."
             arg_type = Union{Nothing,AbstractString}
             default = nothing
         "--logdir", "-l"
@@ -269,7 +299,7 @@ function parse_commandline(nmfmodel::Union{DNMF,SPARSE_DNMF})
 end
 
 # Return N, M (Zstandard)
-function nm(input::AbstractString, nmfmodel::Union{NMF,DNMF})
+function nm(input::AbstractString, nmfmodel::Union{NMF,DNMF,SPARSE_NMF,SPARSE_DNMF})
     N = zeros(UInt32, 1)
     M = zeros(UInt32, 1)
     open(input) do file
@@ -281,27 +311,10 @@ function nm(input::AbstractString, nmfmodel::Union{NMF,DNMF})
     return N[], M[]
 end
 
-# Return N, M (Zstandard + Matrix Market)
-function nm(input::AbstractString, nmfmodel::Union{SPARSE_NMF,SPARSE_DNMF})
-    open(input, "r") do file
-        stream = ZstdDecompressorStream(file)
-        while !eof(stream)
-            line = readline(stream)
-            if !startswith(line, "%")
-                dims = parse.(Int, split(line))
-                close(stream)
-                return dims[1], dims[2]
-            end
-        end
-        close(stream)
-        error("Invalid Matrix Market file format: No valid header found")
-    end
-end
-
 # Output log file
-function outputlog(s::Number, input::AbstractString, logdir::AbstractString, U::AbstractArray, V::AbstractArray, lower::Number, upper::Number, nmfmodel::Union{NMF,DNMF})
+function outputlog(s::Number, input::AbstractString, logdir::AbstractString, U::AbstractArray, V::AbstractArray, lower::Number, upper::Number, nmfmodel::Union{NMF,DNMF,SPARSE_NMF,SPARSE_DNMF}, chunksize::Number)
     stop = 0
-    E = RecError(input, U, V, nmfmodel)
+    E = RecError(input, U, V, nmfmodel, chunksize)
     if s != 1
         old_E = read_csv(joinpath(logdir, "RecError_Epoch"*string(s-1)*".csv"))
         RelChange = abs(E - Float32(old_E[1,2])) / E
@@ -324,24 +337,88 @@ function outputlog(s::Number, input::AbstractString, logdir::AbstractString, U::
 end
 
 # Reconstuction Error
-function RecError(input::AbstractString, U::AbstractArray, V::AbstractArray,     nmfmodel::Union{NMF,DNMF})
-    N, M = nm(input, nmfmodel)
-    tmpN = zeros(UInt32, 1)
-    tmpM = zeros(UInt32, 1)
-    x = zeros(UInt32, M)
+function RecError(input::AbstractString, U::AbstractArray, V::AbstractArray, nmfmodel::Union{NMF,DNMF}, chunksize::Number)
+    N = zeros(UInt32, 1)
+    M = zeros(UInt32, 1)
     E = 0.0f0
     open(input) do file
         stream = ZstdDecompressorStream(file)
-        read!(stream, tmpN)
-        read!(stream, tmpM)
-        for n = 1:N
-            # Data Import
-            read!(stream, x)
-            E += Float32(sum((x' - U[n:n, :] * V').^2))
+        read!(stream, N)
+        read!(stream, M)
+        N, M = N[], M[]
+        n = 1
+        while n <= N
+            batch_size = min(chunksize, N - n + 1)
+            X_batch = zeros(UInt32, batch_size, M)
+            read!(stream, X_batch)
+            U_batch = @view U[n:n+batch_size-1, :]
+            E += Float32(sum((X_batch - U_batch * V').^2))
+            n += batch_size
         end
         close(stream)
     end
     @assert E isa Float32
-    # Return
+    return E
+end
+
+function RecError(input::AbstractString, U::AbstractArray, V::AbstractArray, nmfmodel::Union{SPARSE_NMF,SPARSE_DNMF}, chunksize::Number)
+    N = zeros(UInt32, 1)
+    M = zeros(UInt32, 1)
+    E = 0.0f0
+    open(input, "r") do file
+        stream = ZstdDecompressorStream(file)
+        read!(stream, N)
+        read!(stream, M)
+        N, M = N[], M[]
+        overflow_buf = UInt32[]
+        n = 1
+        while n <= N
+            batch_size = min(chunksize, N - n + 1)
+            max_size = (batch_size + 1) * M # For overflow
+            rows = zeros(UInt32, max_size)
+            cols = zeros(UInt32, max_size)
+            vals = zeros(UInt32, max_size)
+            count = 0
+            ############### Overflow buffer ###############
+            if length(overflow_buf) > 0
+                count += 1
+                # Re-mapping row index
+                rows[count] = overflow_buf[1] - n + 1
+                cols[count] = overflow_buf[2]
+                vals[count] = overflow_buf[3]
+                empty!(overflow_buf)
+            end
+            ###############################################
+            while !eof(stream)
+                buf = zeros(UInt32, 3)
+                read!(stream, buf)
+                row, col, val = buf[1], buf[2], buf[3]
+                if n ≤ row < n + batch_size
+                    count += 1
+                    # Re-mapping row index
+                    rows[count] = row - n + 1
+                    cols[count] = col
+                    vals[count] = val
+                else
+                    overflow_buf = buf
+                    break
+                end
+            end
+            # Remove 0s from the end
+            resize!(rows, count)
+            resize!(cols, count)
+            resize!(vals, count)
+            if count > 0
+                X_chunk = sparse(rows, cols, vals, batch_size, M)
+            else
+                X_chunk = spzeros(batch_size, M)
+            end
+            U_chunk = @view U[n:n+batch_size-1, :]
+            E += Float32(sum((Matrix(X_chunk) - U_chunk * V').^2))
+            n += batch_size
+        end
+        close(stream)
+    end
+    @assert E isa Float32
     return E
 end

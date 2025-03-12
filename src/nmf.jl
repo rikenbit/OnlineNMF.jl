@@ -1,7 +1,5 @@
 """
-    nmf(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, alpha::Number=1, beta::Number=2, l1u::Number=eps(Float32), l1v::Number=eps(Float32), l2u::Number=eps(Float32), l2v::Number=eps(Float32), dim::Number=3, numepoch::Number=5, chunksize::Number=1,
-    algorithm::AbstractString="frobenius",
-    lower::Number=0, upper::Number=1.0f+38, initU::Union{Nothing,AbstractString}=nothing, initV::Union{Nothing,AbstractString}=nothing, logdir::Union{Nothing,AbstractString}=nothing)
+    nmf(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, alpha::Number=1, beta::Number=2, graphv::Number=0, l1u::Number=eps(Float32), l1v::Number=eps(Float32), l2u::Number=eps(Float32), l2v::Number=eps(Float32), dim::Number=3, numepoch::Number=5, chunksize::Number=1, algorithm::AbstractString="frobenius", lower::Number=0, upper::Number=1.0f+38, initU::Union{Nothing,AbstractString}=nothing, initV::Union{Nothing,AbstractString}=nothing, initL::Union{Nothing,AbstractString}=nothing, logdir::Union{Nothing,AbstractString}=nothing)
 
     Non-negative Matrix Factorization (NMF).
 
@@ -11,6 +9,7 @@ Input Arguments
 - `outdir` : The directory user want to save the result.
 - `alpha` : The parameter of Alpha-divergence.
 - `beta` : The parameter of Beta-divergence.
+- `graphv` : Graph regularization parameter for the factor matrix V.
 - `l1u` : L1-regularization parameter for the factor matrix U.
 - `l1v` : L1-regularization parameter for the factor matrix V.
 - `l2u` : L2-regularization parameter for the factor matrix U.
@@ -23,6 +22,7 @@ Input Arguments
 - `upper` : Stopping Criteria (When the relative change of error is above this value, the calculation is terminated).
 - `initU` : The CSV file saving the initial values of factor matrix U.
 - `initV` : The CSV file saving the initial values of factor matrix V.
+- `initL` : The CSV file saving the initial values of graph laplacian L.
 - `logdir` : The directory where intermediate files are saved in every epoch.
 
 Output Arguments
@@ -34,6 +34,7 @@ Output Arguments
 function nmf(;input::AbstractString="",
     outdir::Union{Nothing,AbstractString}=nothing,
     alpha::Number=1, beta::Number=2,
+    graphv::Number=0,
     l1u::Number=eps(Float32), l1v::Number=eps(Float32),
     l2u::Number=eps(Float32), l2v::Number=eps(Float32),
     dim::Number=3, numepoch::Number=5, chunksize::Number=1,
@@ -41,12 +42,13 @@ function nmf(;input::AbstractString="",
     lower::Number=0, upper::Number=1.0f+38,
     initU::Union{Nothing,AbstractString}=nothing,
     initV::Union{Nothing,AbstractString}=nothing,
+    initL::Union{Nothing,AbstractString}=nothing,
     logdir::Union{Nothing,AbstractString}=nothing)
     # Initial Setting
     nmfmodel = NMF()
-    alpha, beta, l1u, l1v, l2u, l2v, U, V, N, M, dim, numepoch, chunksize, algorithm, lower, upper = init_nmf(input, alpha, beta, l1u, l1v, l2u, l2v, dim, numepoch, chunksize, algorithm, initU, initV, logdir, lower, upper, nmfmodel)
+    alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper = init_nmf(input, alpha, beta, graphv, l1u, l1v, l2u, l2v, dim, numepoch, chunksize, algorithm, initU, initV, initL, logdir, lower, upper, nmfmodel)
     # Perform NMF
-    out = each_nmf(input, alpha, beta, l1u, l1v, l2u, l2v, U, V, N, M, dim, numepoch, chunksize, algorithm, lower, upper, nmfmodel)
+    out = each_nmf(input, alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper, nmfmodel)
     if outdir isa String
         mkpath(outdir)
         output(outdir, out, lower)
@@ -54,7 +56,7 @@ function nmf(;input::AbstractString="",
     return out
 end
 
-function each_nmf(input, alpha, beta, l1u, l1v, l2u, l2v, U, V, N, M, dim, numepoch, chunksize, algorithm, lower, upper, nmfmodel)
+function each_nmf(input, alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper, nmfmodel)
     # If not 0 the calculation is converged
     stop = 0
     s = 1
@@ -67,7 +69,7 @@ function each_nmf(input, alpha, beta, l1u, l1v, l2u, l2v, U, V, N, M, dim, numep
         # NaN
         checkNaN(U)
         # Update V
-        V = update_V(input, N, M, U, V, alpha, beta, l1v, l2v, chunksize, algorithm)
+        V = update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v, l2v, chunksize, algorithm)
         # NaN
         checkNaN(V)
         # Normalization
@@ -76,7 +78,7 @@ function each_nmf(input, alpha, beta, l1u, l1v, l2u, l2v, U, V, N, M, dim, numep
         V = V .* norm
         # save log file
         if logdir isa String
-            stop = outputlog(s, input, logdir, U, V, lower, upper, nmfmodel)
+            stop = outputlog(s, input, logdir, U, V, lower, upper, nmfmodel, chunksize)
         end
         s += 1
     end
@@ -92,12 +94,10 @@ function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm
     U .* update_factor
 end
 
-
 function update_U_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
     numer = zeros(size(U))
-    X_chunk = zeros(UInt32, chunksize, M)
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
         read!(stream, tmpN)
@@ -105,7 +105,9 @@ function update_U_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
         n = 1
         while n <= N
             batch_size = min(chunksize, N - n + 1)
-            read!(stream, view(X_chunk, 1:batch_size, :))
+            buffer = zeros(UInt32, batch_size * M)
+            read!(stream, buffer)
+            X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
             @turbo numer[n:n+batch_size-1, :] = ((X_chunk ./ (U_chunk * V')) .^ alpha) * V
             n += batch_size
@@ -122,7 +124,7 @@ end
 # Update U (Beta-divergence)
 function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm::BETA)
     numer = update_U_numer_BETA(input, N, M, U, V, beta, chunksize)
-    denom = update_U_denom_BETA(U, V, beta, l1u, l2u, chunksize)
+    denom = update_U_denom_BETA(N, U, V, beta, l1u, l2u, chunksize)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ rho(beta))
     U .* update_factor
 end
@@ -131,7 +133,6 @@ function update_U_numer_BETA(input, N, M, U, V, beta, chunksize)
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
     numer = zeros(size(U))
-    X_chunk = zeros(UInt32, chunksize, M)
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
         read!(stream, tmpN)
@@ -139,7 +140,9 @@ function update_U_numer_BETA(input, N, M, U, V, beta, chunksize)
         n = 1
         while n <= N
             batch_size = min(chunksize, N - n + 1)
-            read!(stream, view(X_chunk, 1:batch_size, :))
+            buffer = zeros(UInt32, batch_size * M)
+            read!(stream, buffer)
+            X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
             @turbo numer[n:n+batch_size-1, :] = (((U_chunk * V').^(beta - 2)) .* X_chunk) * V
             n += batch_size
@@ -149,20 +152,21 @@ function update_U_numer_BETA(input, N, M, U, V, beta, chunksize)
     return numer
 end
 
-function update_U_denom_BETA(U, V, beta, l1u, l2u, chunksize)
-    numer = zeros(size(U))
+function update_U_denom_BETA(N, U, V, beta, l1u, l2u, chunksize)
+    denom = zeros(size(U))
     n = 1
     while n <= N
         batch_size = min(chunksize, N - n + 1)
         U_chunk = @view U[n:n+batch_size-1, :]
-        @turbo numer[n:n+batch_size-1, :] = ((U_chunk * V').^(beta - 1)) * V .+ l1u + l2u .* U_chunk
+        @turbo denom[n:n+batch_size-1, :] = ((U_chunk * V').^(beta - 1)) * V .+ l1u + l2u .* U_chunk
         n += batch_size
     end
-    return numer
+    return denom
 end
 
 # Update V (Alpha-divergence)
-function update_V(input, N, M, U, V, alpha, beta, l1v, l2v, chunksize, algorithm::ALPHA)
+
+function update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v, l2v, chunksize, algorithm::ALPHA)
     numer = update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_V_denom_ALPHA(M, U)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1/alpha))
@@ -173,7 +177,6 @@ function update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
     numer = zeros(size(V))
-    X_chunk = zeros(UInt32, chunksize, M)
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
         read!(stream, tmpN)
@@ -181,7 +184,9 @@ function update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
         n = 1
         while n <= N
             batch_size = min(chunksize, N - n + 1)
-            read!(stream, view(X_chunk, 1:batch_size, :))
+            buffer = zeros(UInt32, batch_size * M)
+            read!(stream, buffer)
+            X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
             @turbo numer .+= ((X_chunk ./ (U_chunk * V')).^alpha)' * U_chunk
             n += batch_size
@@ -196,9 +201,9 @@ function update_V_denom_ALPHA(M, U)
 end
 
 # Update V (Beta-divergence)
-function update_V(input, N, M, U, V, alpha, beta, l1v, l2v, chunksize, algorithm::BETA)
+function update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v, l2v, chunksize, algorithm::BETA)
     numer = update_V_numer_BETA(input, N, M, U, V, beta, chunksize)
-    denom = update_V_denom_BETA(U, V, beta, l1v, l2v, chunksize)
+    denom = update_V_denom_BETA(N, U, V, L, beta, graphv, l1v, l2v, chunksize)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ rho(beta))
     V .* update_factor
 end
@@ -207,7 +212,6 @@ function update_V_numer_BETA(input, N, M, U, V, beta, chunksize)
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
     numer = zeros(size(V))
-    X_chunk = zeros(UInt32, chunksize, M)
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
         read!(stream, tmpN)
@@ -215,7 +219,9 @@ function update_V_numer_BETA(input, N, M, U, V, beta, chunksize)
         n = 1
         while n <= N
             batch_size = min(chunksize, N - n + 1)
-            read!(stream, view(X_chunk, 1:batch_size, :))
+            buffer = zeros(UInt32, batch_size * M)
+            read!(stream, buffer)
+            X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
             @turbo numer .+= ((U_chunk * V').^(beta - 2) .* X_chunk)' * U_chunk
             n += batch_size
@@ -225,29 +231,31 @@ function update_V_numer_BETA(input, N, M, U, V, beta, chunksize)
     return numer
 end
 
-function update_V_denom_BETA(U, V, beta, l1u, l2u, chunksize)
-    numer = zeros(size(V))
+function update_V_denom_BETA(N, U, V, L, beta, graphv, l1v, l2v, chunksize)
+    denom = zeros(size(V))
     n = 1
     while n <= N
         batch_size = min(chunksize, N - n + 1)
         U_chunk = @view U[n:n+batch_size-1, :]
-        @turbo numer .+= ((U_chunk * V') .^ (beta - 1))' * U_chunk .+ l1v + l2v .* V
+        @turbo denom .+= ((U_chunk * V') .^ (beta - 1))' * U_chunk .+ l1v + l2v .* V + graphv .* (L * V)
         n += batch_size
     end
-    return numer
+    return denom
 end
 
 # Initialization step in NMF
 function init_nmf(input::AbstractString,
-    alpha::Number, beta::Number, l1u::Number, l1v::Number,
+    alpha::Number, beta::Number, graphv::Number, l1u::Number, l1v::Number,
     l2u::Number, l2v::Number, dim::Number, numepoch::Number, chunksize::Number,
     algorithm::AbstractString,
     initU::Union{Nothing,AbstractString}, initV::Union{Nothing,AbstractString},
+    initL::Union{Nothing,AbstractString},
     logdir::Union{Nothing,AbstractString}, lower::Number, upper::Number, nmfmodel::NMF)
     # Type Check
     N, M = nm(input, nmfmodel)
     alpha = convert(Float32, alpha)
     beta = convert(Float32, beta)
+    graphv = convert(Float32, graphv)
     l1u = convert(Float32, l1u)
     l1v = convert(Float32, l1v)
     l2u = convert(Float32, l2u)
@@ -260,7 +268,8 @@ function init_nmf(input::AbstractString,
     upper = convert(Float32, upper)
     # Initialization of U and V
     U = load_or_random(initU, N, dim)
-    V = load_or_random(initV, M, dim)    
+    V = load_or_random(initV, M, dim)
+    L = load_or_random(initL, M, M, true)
     # Algorithm setting
     algorithm, alpha, beta = select_algorithm(algorithm, alpha, beta)
     # directory setting
@@ -269,5 +278,5 @@ function init_nmf(input::AbstractString,
             mkpath(logdir)
         end
     end
-    return alpha, beta, l1u, l1v, l2u, l2v, U, V, N, M, dim, numepoch, chunksize, algorithm, lower, upper
+    return alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper
 end

@@ -42,7 +42,7 @@ julia> Pkg.add("OnlineNMF")
 ```julia
 using OnlinePCA
 using OnlinePCA: readcsv, writecsv
-using OnlineNMF
+# using OnlineNMF
 using Distributions
 using DelimitedFiles
 using SparseArrays
@@ -50,14 +50,14 @@ using MatrixMarket
 
 # CSV
 tmp = mktempdir()
-input = Int64.(ceil.(rand(Binomial(10, 0.05), 300, 99)))
-input[1:50, 1:33] .= 100*input[1:50, 1:33]
-input[51:100, 34:66] .= 100*input[51:100, 34:66]
-input[101:150, 67:99] .= 100*input[101:150, 67:99]
-writecsv(joinpath(tmp, "Data.csv"), input)
+data = rand(Binomial(10, 0.05), 300, 99)
+data[1:50, 1:33] .= 100*data[1:50, 1:33]
+data[51:100, 34:66] .= 100*data[51:100, 34:66]
+data[101:150, 67:99] .= 100*data[101:150, 67:99]
+writecsv(joinpath(tmp, "Data.csv"), data)
 
 # Matrix Market (MM)
-mmwrite(joinpath(tmp, "Data.mtx"), sparse(input))
+mmwrite(joinpath(tmp, "Data.mtx"), sparse(data))
 
 # Binarization (Zstandard)
 csv2bin(csvfile=joinpath(tmp, "Data.csv"), binfile=joinpath(tmp, "Data.zst"))
@@ -113,18 +113,18 @@ out_nmf_beta = nmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=2, algorithm="be
 
 subplots(out_nmf_beta, group)
 ```
-### Semi-Binary NMF based on Beta-Divergence
+### Semi-Binary MF based on Beta-Divergence
 ```julia
-out_dnmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, binu=10^2)
+out_shmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, binu=10^2)
 minimum(out_dnmf_beta[1])
 maximum(out_dnmf_beta[1])
 
 subplots(out_nmf_beta, group)
 ```
 
-### Semi-Ternary NMF based on Beta-Divergence
+### Semi-Ternary MF based on Beta-Divergence
 ```julia
-out_dnmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, teru=10^2)
+out_stmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, teru=10^2)
 minimum(out_dnmf_beta[1])
 median(out_dnmf_beta[1])
 maximum(out_dnmf_beta[1])
@@ -134,20 +134,20 @@ subplots(out_nmf_beta, group)
 
 ### Sparse-NMF based on Alpha-Divergence
 ```julia
-out_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1)
+out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1, algorithm="alpha")
 
 subplots(out_nmf_alpha, group)
 ```
 
 ### Sparse-NMF based on Beta-Divergence
 ```julia
-out_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2)
+out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, algorithm="beta")
 
 subplots(out_nmf_beta, group)
 ```
 ### Sparse-DNMF based on Beta-Divergence
 ```julia
-out_nmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2)
+out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2)
 
 subplots(out_nmf_beta, group)
 ```
