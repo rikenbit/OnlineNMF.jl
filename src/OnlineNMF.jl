@@ -7,11 +7,11 @@ using Random:
 using LinearAlgebra:
     Diagonal
 using ProgressMeter:
-	Progress, next!
+    Progress, next!
 using ArgParse:
     ArgParseSettings, parse_args, @add_arg_table
 using CodecZstd:
-	ZstdCompressorStream, ZstdDecompressorStream
+    ZstdCompressorStream, ZstdDecompressorStream
 using SparseArrays:
     sparse
 using LoopVectorization:
@@ -24,5 +24,6 @@ include("nmf.jl")
 include("dnmf.jl")
 include("sparse_nmf.jl")
 include("sparse_dnmf.jl")
+include("graph_laplacian.jl")
 
 end

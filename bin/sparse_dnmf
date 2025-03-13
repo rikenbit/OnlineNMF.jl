@@ -4,7 +4,7 @@ using ArgParse:
 
 # main
 function main()
-    nmfmodel = OnlineNMF.DNMF()
+    nmfmodel = OnlineNMF.SPARSE_DNMF()
     parsed_args = OnlineNMF.parse_commandline(nmfmodel)
     println("Parsed args:")
     for (arg, val) in parsed_args
@@ -71,7 +71,7 @@ function main()
         logdir = String(parsed_args["logdir"])
     end
 
-    out = OnlineNMF.dnmf(input=parsed_args["input"],
+    out = OnlineNMF.sparse_dnmf(input=parsed_args["input"],
         beta=beta,
         binu=binu,
         binv=binv,

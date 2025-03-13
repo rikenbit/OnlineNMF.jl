@@ -33,25 +33,98 @@ Output Arguments
 - `V` : Factor matrix (No. rows of the data matrix × dim)
 - stop : Whether the calculation is converged
 """
-function dnmf(;input::AbstractString="",
+function dnmf(;
+    input::AbstractString="",
     outdir::Union{Nothing,AbstractString}=nothing,
     beta::Number=2,
-    binu::Number=eps(Float32), binv::Number=eps(Float32),
+    binu::Number=eps(Float32),
+    binv::Number=eps(Float32),
     graphv::Number=0,
-    teru::Number=eps(Float32), terv::Number=eps(Float32),
-    l1u::Number=eps(Float32), l1v::Number=eps(Float32),
-    l2u::Number=eps(Float32), l2v::Number=eps(Float32),
-    dim::Number=3, numepoch::Number=5, chunksize::Number=1,
-    lower::Number=0, upper::Number=1.0f+38,
+    teru::Number=eps(Float32),
+    terv::Number=eps(Float32),
+    l1u::Number=eps(Float32),
+    l1v::Number=eps(Float32),
+    l2u::Number=eps(Float32),
+    l2v::Number=eps(Float32),
+    dim::Number=3,
+    numepoch::Number=5,
+    chunksize::Number=1,
+    lower::Number=0,
+    upper::Number=1.0f+38,
     initU::Union{Nothing,AbstractString}=nothing,
     initV::Union{Nothing,AbstractString}=nothing,
     initL::Union{Nothing,AbstractString}=nothing,
-    logdir::Union{Nothing,AbstractString}=nothing)
+    logdir::Union{Nothing,AbstractString}=nothing,
+)
     # Initialization of NMF
     nmfmodel = DNMF()
-    beta, binu, binv, teru, terv, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, logdir, lower, upper = init_dnmf(input, outdir, beta, binu, binv, teru, terv, graphv, l1u, l1v, l2u, l2v, dim, numepoch, chunksize, initU, initV, initL, logdir, lower, upper, nmfmodel)
+    beta,
+    binu,
+    binv,
+    teru,
+    terv,
+    graphv,
+    l1u,
+    l1v,
+    l2u,
+    l2v,
+    U,
+    V,
+    L,
+    N,
+    M,
+    numepoch,
+    chunksize,
+    logdir,
+    lower,
+    upper = init_dnmf(
+        input,
+        outdir,
+        beta,
+        binu,
+        binv,
+        teru,
+        terv,
+        graphv,
+        l1u,
+        l1v,
+        l2u,
+        l2v,
+        dim,
+        numepoch,
+        chunksize,
+        initU,
+        initV,
+        initL,
+        logdir,
+        lower,
+        upper
+    )
     # Perform DNMF
-    out = each_dnmf(input, beta, binu, binv, teru, terv, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, logdir, lower, upper, nmfmodel)
+    out = each_dnmf(
+        input,
+        beta,
+        binu,
+        binv,
+        teru,
+        terv,
+        graphv,
+        l1u,
+        l1v,
+        l2u,
+        l2v,
+        U,
+        V,
+        L,
+        N,
+        M,
+        numepoch,
+        chunksize,
+        logdir,
+        lower,
+        upper,
+        nmfmodel,
+    )
     if outdir isa String
         mkpath(outdir)
         output(outdir, out, lower)
@@ -59,13 +132,36 @@ function dnmf(;input::AbstractString="",
     return out
 end
 
-function each_dnmf(input, beta, binu, binv, teru, terv, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, logdir, lower, upper, nmfmodel)
+function each_dnmf(
+    input,
+    beta,
+    binu,
+    binv,
+    teru,
+    terv,
+    graphv,
+    l1u,
+    l1v,
+    l2u,
+    l2v,
+    U,
+    V,
+    L,
+    N,
+    M,
+    numepoch,
+    chunksize,
+    logdir,
+    lower,
+    upper,
+    nmfmodel,
+)
     # If not 0 the calculation is converged
     stop = 0
     s = 1
     # Each epoch s
     progress = Progress(numepoch)
-    while(stop == 0 && s <= numepoch)
+    while (stop == 0 && s <= numepoch)
         next!(progress)
         # Update U
         U = update_dU(input, N, M, U, V, beta, binu, teru, l1u, l2u, chunksize)
@@ -108,7 +204,10 @@ function update_dU_numer_BETA(input, N, M, U, V, beta, binu, teru, chunksize)
             read!(stream, buffer)
             X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
-            @turbo numer[n:n+batch_size-1, :] = (((U_chunk * V').^(beta - 2)) .* X_chunk) * V + 3 * binu .* (U_chunk.^2) + teru .* (30 .* U_chunk.^4 .+ 36 .* U_chunk.^2)
+            @turbo numer[n:n+batch_size-1, :] =
+                (((U_chunk * V') .^ (beta - 2)) .* X_chunk) * V +
+                3 * binu .* (U_chunk .^ 2) +
+                teru .* (30 .* U_chunk .^ 4 .+ 36 .* U_chunk .^ 2)
             n += batch_size
         end
         close(stream)
@@ -122,7 +221,11 @@ function update_dU_denom_BETA(N, U, V, beta, binu, teru, l1u, l2u, chunksize)
     while n <= N
         batch_size = min(chunksize, N - n + 1)
         U_chunk = @view U[n:n+batch_size-1, :]
-        @turbo denom[n:n+batch_size-1, :] = ((U_chunk * V').^(beta - 1)) * V .+ l1u + l2u .* U_chunk + binu .* (2 .* U_chunk.^3 .+ U_chunk) + teru .* (6 .* U_chunk.^5 .+ 52 .* U_chunk.^3 .+ 8 .* U_chunk)
+        @turbo denom[n:n+batch_size-1, :] =
+            ((U_chunk * V') .^ (beta - 1)) * V .+ l1u +
+            l2u .* U_chunk +
+            binu .* (2 .* U_chunk .^ 3 .+ U_chunk) +
+            teru .* (6 .* U_chunk .^ 5 .+ 52 .* U_chunk .^ 3 .+ 8 .* U_chunk)
         n += batch_size
     end
     return denom
@@ -151,7 +254,10 @@ function update_dV_numer_BETA(input, N, M, U, V, beta, binv, terv, chunksize)
             read!(stream, buffer)
             X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
-            @turbo numer .+= ((U_chunk * V').^(beta - 2) .* X_chunk)' * U_chunk + 3 * binv .* (V.^2) + terv .* (30 .* V.^4 .+ 36 .* V.^2)
+            @turbo numer .+=
+                ((U_chunk * V') .^ (beta - 2) .* X_chunk)' * U_chunk +
+                3 * binv .* (V .^ 2) +
+                terv .* (30 .* V .^ 4 .+ 36 .* V .^ 2)
             n += batch_size
         end
         close(stream)
@@ -165,36 +271,68 @@ function update_dV_denom_BETA(N, U, V, L, beta, binv, terv, graphv, l1v, l2v, ch
     while n <= N
         batch_size = min(chunksize, N - n + 1)
         U_chunk = @view U[n:n+batch_size-1, :]
-        @turbo denom .+= ((U_chunk * V') .^ (beta - 1))' * U_chunk .+ l1v + l2v .* V + binv .* (2 .* V.^3 .+ V) + terv .* (6 .* V.^5 .+ 52 .* V.^3 .+ 8 .* V) + graphv .* (L * V)
+        @turbo denom .+=
+            ((U_chunk * V') .^ (beta - 1))' * U_chunk .+ l1v +
+            l2v .* V +
+            binv .* (2 .* V .^ 3 .+ V) +
+            terv .* (6 .* V .^ 5 .+ 52 .* V .^ 3 .+ 8 .* V) +
+            graphv .* (L * V)
         n += batch_size
     end
     return denom
 end
 
 # Initialization step in DNMF
-function init_dnmf(input::AbstractString, outdir::Union{Nothing,AbstractString},
-    beta::Number, 
-    binu::Number, binv::Number,
-    teru::Number, terv::Number,
+function init_dnmf(
+    input::AbstractString,
+    outdir::Union{Nothing,AbstractString},
+    beta::Number,
+    binu::Number,
+    binv::Number,
+    teru::Number,
+    terv::Number,
     graphv::Number,
-    l1u::Number, l1v::Number,
-    l2u::Number, l2v::Number, dim::Number, numepoch::Number, chunksize::Number,
-    initU::Union{Nothing,AbstractString}, initV::Union{Nothing,AbstractString},
+    l1u::Number,
+    l1v::Number,
+    l2u::Number,
+    l2v::Number,
+    dim::Number,
+    numepoch::Number,
+    chunksize::Number,
+    initU::Union{Nothing,AbstractString},
+    initV::Union{Nothing,AbstractString},
     initL::Union{Nothing,AbstractString},
-    logdir::Union{Nothing,AbstractString}, lower::Number, upper::Number, nmfmodel::DNMF)
+    logdir::Union{Nothing,AbstractString},
+    lower::Number,
+    upper::Number
+)
     # Type Check
-    N, M = nm(input, nmfmodel)
+    N, M = nm(input)
     binu = convert(Float32, binu)
     binv = convert(Float32, binv)
     teru = convert(Float32, teru)
     terv = convert(Float32, terv)
     graphv = convert(Float32, graphv)
     # Initialization by NMF
-    out_nmf = nmf(input=input, outdir=outdir, alpha=1, beta=beta,
-    l1u=l1u, l1v=l1v, l2u=l2u, l2v=l2v, dim=dim,
-    numepoch=numepoch, chunksize=chunksize,
-    algorithm="beta", lower=lower, upper=upper,
-    initU=initU, initV=initV, logdir=logdir)
+    out_nmf = nmf(
+        input=input,
+        outdir=outdir,
+        alpha=1,
+        beta=beta,
+        l1u=l1u,
+        l1v=l1v,
+        l2u=l2u,
+        l2v=l2v,
+        dim=dim,
+        numepoch=numepoch,
+        chunksize=chunksize,
+        algorithm="beta",
+        lower=lower,
+        upper=upper,
+        initU=initU,
+        initV=initV,
+        logdir=logdir,
+    )
     U = out_nmf[1]
     V = out_nmf[2]
     # Normalization
@@ -204,5 +342,24 @@ function init_dnmf(input::AbstractString, outdir::Union{Nothing,AbstractString},
     V = V * Diagonal(1.0 ./ sqrt.(Dv.diag)) * sqrt(Du)
     # Initialization of L
     L = load_or_zero(initL, M)
-    return beta, binu, binv, teru, terv, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, logdir, lower, upper
+    return beta,
+    binu,
+    binv,
+    teru,
+    terv,
+    graphv,
+    l1u,
+    l1v,
+    l2u,
+    l2v,
+    U,
+    V,
+    L,
+    N,
+    M,
+    numepoch,
+    chunksize,
+    logdir,
+    lower,
+    upper
 end

@@ -31,24 +31,89 @@ Output Arguments
 - `V` : Factor matrix (No. rows of the data matrix × dim)
 - stop : Whether the calculation is converged
 """
-function nmf(;input::AbstractString="",
+function nmf(;
+    input::AbstractString="",
     outdir::Union{Nothing,AbstractString}=nothing,
-    alpha::Number=1, beta::Number=2,
+    alpha::Number=1,
+    beta::Number=2,
     graphv::Number=0,
-    l1u::Number=eps(Float32), l1v::Number=eps(Float32),
-    l2u::Number=eps(Float32), l2v::Number=eps(Float32),
-    dim::Number=3, numepoch::Number=5, chunksize::Number=1,
+    l1u::Number=eps(Float32),
+    l1v::Number=eps(Float32),
+    l2u::Number=eps(Float32),
+    l2v::Number=eps(Float32),
+    dim::Number=3,
+    numepoch::Number=5,
+    chunksize::Number=1,
     algorithm::AbstractString="frobenius",
-    lower::Number=0, upper::Number=1.0f+38,
+    lower::Number=0,
+    upper::Number=1.0f+38,
     initU::Union{Nothing,AbstractString}=nothing,
     initV::Union{Nothing,AbstractString}=nothing,
     initL::Union{Nothing,AbstractString}=nothing,
-    logdir::Union{Nothing,AbstractString}=nothing)
+    logdir::Union{Nothing,AbstractString}=nothing,
+)
     # Initial Setting
     nmfmodel = NMF()
-    alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper = init_nmf(input, alpha, beta, graphv, l1u, l1v, l2u, l2v, dim, numepoch, chunksize, algorithm, initU, initV, initL, logdir, lower, upper, nmfmodel)
+    alpha,
+    beta,
+    graphv,
+    l1u,
+    l1v,
+    l2u,
+    l2v,
+    U,
+    V,
+    L,
+    N,
+    M,
+    numepoch,
+    chunksize,
+    algorithm,
+    logdir,
+    lower,
+    upper = init_nmf(
+        input,
+        alpha,
+        beta,
+        graphv,
+        l1u,
+        l1v,
+        l2u,
+        l2v,
+        dim,
+        numepoch,
+        chunksize,
+        algorithm,
+        initU,
+        initV,
+        initL,
+        logdir,
+        lower,
+        upper
+    )
     # Perform NMF
-    out = each_nmf(input, alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper, nmfmodel)
+    out = each_nmf(
+        input,
+        alpha,
+        beta,
+        graphv,
+        l1u,
+        l1v,
+        l2u,
+        l2v,
+        U,
+        V,
+        L,
+        N,
+        M,
+        numepoch,
+        chunksize,
+        algorithm,
+        logdir,
+        lower,
+        upper,
+        nmfmodel,
+    )
     if outdir isa String
         mkpath(outdir)
         output(outdir, out, lower)
@@ -56,20 +121,55 @@ function nmf(;input::AbstractString="",
     return out
 end
 
-function each_nmf(input, alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper, nmfmodel)
+function each_nmf(
+    input,
+    alpha,
+    beta,
+    graphv,
+    l1u,
+    l1v,
+    l2u,
+    l2v,
+    U,
+    V,
+    L,
+    N,
+    M,
+    numepoch,
+    chunksize,
+    algorithm,
+    logdir,
+    lower,
+    upper,
+    nmfmodel,
+)
     # If not 0 the calculation is converged
     stop = 0
     s = 1
     # Each epoch s
     progress = Progress(numepoch)
-    while(stop == 0 && s <= numepoch)
+    while (stop == 0 && s <= numepoch)
         next!(progress)
         # Update U
         U = update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm)
         # NaN
         checkNaN(U)
         # Update V
-        V = update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v, l2v, chunksize, algorithm)
+        V = update_V(
+            input,
+            N,
+            M,
+            U,
+            V,
+            L,
+            alpha,
+            beta,
+            graphv,
+            l1v,
+            l2v,
+            chunksize,
+            algorithm,
+        )
         # NaN
         checkNaN(V)
         # Normalization
@@ -90,7 +190,7 @@ end
 function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm::ALPHA)
     numer = update_U_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_U_denom_ALPHA(N, V)
-    update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom).^(1/alpha))
+    update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1 / alpha))
     U .* update_factor
 end
 
@@ -144,7 +244,8 @@ function update_U_numer_BETA(input, N, M, U, V, beta, chunksize)
             read!(stream, buffer)
             X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
-            @turbo numer[n:n+batch_size-1, :] = (((U_chunk * V').^(beta - 2)) .* X_chunk) * V
+            @turbo numer[n:n+batch_size-1, :] =
+                (((U_chunk * V') .^ (beta - 2)) .* X_chunk) * V
             n += batch_size
         end
         close(stream)
@@ -158,18 +259,32 @@ function update_U_denom_BETA(N, U, V, beta, l1u, l2u, chunksize)
     while n <= N
         batch_size = min(chunksize, N - n + 1)
         U_chunk = @view U[n:n+batch_size-1, :]
-        @turbo denom[n:n+batch_size-1, :] = ((U_chunk * V').^(beta - 1)) * V .+ l1u + l2u .* U_chunk
+        @turbo denom[n:n+batch_size-1, :] =
+            ((U_chunk * V') .^ (beta - 1)) * V .+ l1u + l2u .* U_chunk
         n += batch_size
     end
     return denom
 end
 
 # Update V (Alpha-divergence)
-
-function update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v, l2v, chunksize, algorithm::ALPHA)
+function update_V(
+    input,
+    N,
+    M,
+    U,
+    V,
+    L,
+    alpha,
+    beta,
+    graphv,
+    l1v,
+    l2v,
+    chunksize,
+    algorithm::ALPHA,
+)
     numer = update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_V_denom_ALPHA(M, U)
-    update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1/alpha))
+    update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1 / alpha))
     V .* update_factor
 end
 
@@ -188,7 +303,7 @@ function update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
             read!(stream, buffer)
             X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
-            @turbo numer .+= ((X_chunk ./ (U_chunk * V')).^alpha)' * U_chunk
+            @turbo numer .+= ((X_chunk ./ (U_chunk * V')) .^ alpha)' * U_chunk
             n += batch_size
         end
         close(stream)
@@ -201,7 +316,21 @@ function update_V_denom_ALPHA(M, U)
 end
 
 # Update V (Beta-divergence)
-function update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v, l2v, chunksize, algorithm::BETA)
+function update_V(
+    input,
+    N,
+    M,
+    U,
+    V,
+    L,
+    alpha,
+    beta,
+    graphv,
+    l1v,
+    l2v,
+    chunksize,
+    algorithm::BETA,
+)
     numer = update_V_numer_BETA(input, N, M, U, V, beta, chunksize)
     denom = update_V_denom_BETA(N, U, V, L, beta, graphv, l1v, l2v, chunksize)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ rho(beta))
@@ -223,7 +352,7 @@ function update_V_numer_BETA(input, N, M, U, V, beta, chunksize)
             read!(stream, buffer)
             X_chunk = permutedims(reshape(buffer, M, batch_size))
             U_chunk = @view U[n:n+batch_size-1, :]
-            @turbo numer .+= ((U_chunk * V').^(beta - 2) .* X_chunk)' * U_chunk
+            @turbo numer .+= ((U_chunk * V') .^ (beta - 2) .* X_chunk)' * U_chunk
             n += batch_size
         end
         close(stream)
@@ -237,22 +366,36 @@ function update_V_denom_BETA(N, U, V, L, beta, graphv, l1v, l2v, chunksize)
     while n <= N
         batch_size = min(chunksize, N - n + 1)
         U_chunk = @view U[n:n+batch_size-1, :]
-        @turbo denom .+= ((U_chunk * V') .^ (beta - 1))' * U_chunk .+ l1v + l2v .* V + graphv .* (L * V)
+        @turbo denom .+=
+            ((U_chunk * V') .^ (beta - 1))' * U_chunk .+ l1v + l2v .* V + graphv .* (L * V)
         n += batch_size
     end
     return denom
 end
 
 # Initialization step in NMF
-function init_nmf(input::AbstractString,
-    alpha::Number, beta::Number, graphv::Number, l1u::Number, l1v::Number,
-    l2u::Number, l2v::Number, dim::Number, numepoch::Number, chunksize::Number,
+function init_nmf(
+    input::AbstractString,
+    alpha::Number,
+    beta::Number,
+    graphv::Number,
+    l1u::Number,
+    l1v::Number,
+    l2u::Number,
+    l2v::Number,
+    dim::Number,
+    numepoch::Number,
+    chunksize::Number,
     algorithm::AbstractString,
-    initU::Union{Nothing,AbstractString}, initV::Union{Nothing,AbstractString},
+    initU::Union{Nothing,AbstractString},
+    initV::Union{Nothing,AbstractString},
     initL::Union{Nothing,AbstractString},
-    logdir::Union{Nothing,AbstractString}, lower::Number, upper::Number, nmfmodel::NMF)
+    logdir::Union{Nothing,AbstractString},
+    lower::Number,
+    upper::Number
+)
     # Type Check
-    N, M = nm(input, nmfmodel)
+    N, M = nm(input)
     alpha = convert(Float32, alpha)
     beta = convert(Float32, beta)
     graphv = convert(Float32, graphv)
@@ -278,5 +421,22 @@ function init_nmf(input::AbstractString,
             mkpath(logdir)
         end
     end
-    return alpha, beta, graphv, l1u, l1v, l2u, l2v, U, V, L, N, M, dim, numepoch, chunksize, algorithm, logdir, lower, upper
+    return alpha,
+    beta,
+    graphv,
+    l1u,
+    l1v,
+    l2u,
+    l2v,
+    U,
+    V,
+    L,
+    N,
+    M,
+    numepoch,
+    chunksize,
+    algorithm,
+    logdir,
+    lower,
+    upper
 end

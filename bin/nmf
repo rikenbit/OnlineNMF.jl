@@ -4,55 +4,44 @@ using ArgParse:
 
 # main
 function main()
-    nmf = OnlineNMF.NMF()
-    parsed_args = OnlineNMF.parse_commandline_nmf(nmf)
+    nmfmodel = OnlineNMF.NMF()
+    parsed_args = OnlineNMF.parse_commandline(nmfmodel)
     println("Parsed args:")
     for (arg, val) in parsed_args
         println("  $arg  =>  ", repr(val))
     end
 
-    if parsed_args["pseudocount"] == 1.0f0
-        pseudocount = 1.0f0
-    else
-        pseudocount=parse(Float32, parsed_args["pseudocount"])
-    end
-
-    alpha=parse(Int64, parsed_args["alpha"])
-
-    beta=parse(Int64, parsed_args["beta"])
-
-    L1_U=parse(Float32, parsed_args["L1_U"])
-
-    L1_V=parse(Float32, parsed_args["L1_V"])
-
-    L2_U=parse(Float32, parsed_args["L2_U"])
-
-    L2_V=parse(Float32, parsed_args["L2_V"])
-
-    dim=parse(Int64, parsed_args["dim"])
+    alpha = parse(Int64, parsed_args["alpha"])
+    beta = parse(Int64, parsed_args["beta"])
+    graphv = parse(Float32, parsed_args["graphv"])
+    l1u = parse(Float32, parsed_args["l1u"])
+    l1v = parse(Float32, parsed_args["l1v"])
+    l2u = parse(Float32, parsed_args["l2u"])
+    l2v = parse(Float32, parsed_args["l2v"])
+    dim = parse(Int64, parsed_args["dim"])
 
     if parsed_args["numepoch"] == 5
         numepoch = 5
     else
-        numepoch=parse(Int64, parsed_args["numepoch"])
+        numepoch = parse(Int64, parsed_args["numepoch"])
+    end
+
+    if parsed_args["chunksize"] == 1
+        chunksize = 1
+    else
+        chunksize = parse(Int64, parsed_args["chunksize"])
     end
 
     if parsed_args["lower"] == 0
         lower = 0
     else
-        lower=parse(Float32, parsed_args["lower"])
+        lower = parse(Float32, parsed_args["lower"])
     end
 
     if parsed_args["upper"] == 1.0f+38
         upper = 1.0f+38
     else
-        upper=parse(Float32, parsed_args["upper"])
-    end
-
-    if parsed_args["evalfreq"] == 5000
-        evalfreq = 5000
-    else
-        evalfreq=parse(Int64, parsed_args["evalfreq"])
+        upper = parse(Float32, parsed_args["upper"])
     end
 
     if parsed_args["initU"] == nothing
@@ -67,38 +56,36 @@ function main()
         initV = String(parsed_args["initV"])
     end
 
+    if parsed_args["initL"] == nothing
+        initL = parsed_args["initL"]
+    else
+        initL = String(parsed_args["initL"])
+    end
+
     if parsed_args["logdir"] == nothing
         logdir = parsed_args["logdir"]
     else
         logdir = String(parsed_args["logdir"])
     end
 
-    if parsed_args["perm"] == false
-        perm = false
-    elseif parsed_args["perm"] == "true"
-        perm = true
-    else
-        error("Please specify the perm option as true or false")
-    end
-
     out = OnlineNMF.nmf(input=parsed_args["input"],
-        pseudocount=pseudocount,
         alpha=alpha,
         beta=beta,
-        L1_U=L1_U,
-        L1_V=L1_V,
-        L2_U=L2_U,
-        L2_V=L2_V,
+        graphv=graphv,
+        l1u=l1u,
+        l1v=l1v,
+        l2u=l2u,
+        l2v=l2v,
         dim=dim,
         numepoch=numepoch,
+        chunksize=chunksize,
         lower=lower,
         upper=upper,
-        evalfreq=evalfreq,
         initU=initU,
         initV=initV,
-        logdir=logdir,
-        perm=perm)
-    OnlineNMF.output(parsed_args["outdir"], out)
+        initL=initL,
+        logdir=logdir)
+    OnlineNMF.output(parsed_args["outdir"], out, lower)
 end
 
 main()
