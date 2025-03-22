@@ -1,21 +1,21 @@
 module OnlineNMF
 
-using DelimitedFiles:
-    writedlm, readdlm
-using Random:
-    randperm
-using LinearAlgebra:
-    Diagonal
-using ProgressMeter:
-    Progress, next!
 using ArgParse:
-    ArgParseSettings, parse_args, @add_arg_table
+    ArgParseSettings, parse_args, @add_arg_table!
 using CodecZstd:
     ZstdCompressorStream, ZstdDecompressorStream
-using SparseArrays:
-    sparse
+using DelimitedFiles:
+    writedlm, readdlm
+using LinearAlgebra:
+    Diagonal
 using LoopVectorization:
     @view, @turbo
+using ProgressMeter:
+    Progress, next!
+using Random:
+    randperm
+using SparseArrays:
+    sparse
 
 export output, parse_commandline, nmf, dnmf, sparse_nmf, sparse_dnmf, graph_laplacian
 

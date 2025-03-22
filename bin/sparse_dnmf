@@ -11,18 +11,72 @@ function main()
         println("  $arg  =>  ", repr(val))
     end
 
-    beta = parse(Int64, parsed_args["beta"])
-    binu = parse(Float32, parsed_args["binu"])
-    binv = parse(Float32, parsed_args["binv"])
-    teru = parse(Float32, parsed_args["teru"])
-    terv = parse(Float32, parsed_args["terv"])
-    graphv = parse(Float32, parsed_args["graphv"])
-    l1u = parse(Float32, parsed_args["l1u"])
-    l1v = parse(Float32, parsed_args["l1v"])
-    l2u = parse(Float32, parsed_args["l2u"])
-    l2v = parse(Float32, parsed_args["l2v"])
-    dim = parse(Int64, parsed_args["dim"])
+    if parsed_args["beta"] == 2
+        beta = 2
+    else
+        beta = parse(Int64, parsed_args["beta"])
+    end
 
+    if parsed_args["binu"] == eps(Float32)
+        binu = eps(Float32)
+    else
+        binu = parse(Int64, parsed_args["binu"])
+    end
+
+    if parsed_args["binv"] == eps(Float32)
+        binv = eps(Float32)
+    else
+        binv = parse(Int64, parsed_args["binv"])
+    end
+
+    if parsed_args["teru"] == eps(Float32)
+        teru = eps(Float32)
+    else
+        teru = parse(Int64, parsed_args["teru"])
+    end
+
+    if parsed_args["terv"] == eps(Float32)
+        terv = eps(Float32)
+    else
+        terv = parse(Int64, parsed_args["terv"])
+    end
+
+    if parsed_args["graphv"] == eps(Float32)
+        graphv = eps(Float32)
+    else
+        graphv = parse(Int64, parsed_args["graphv"])
+    end
+
+    if parsed_args["l1u"] == eps(Float32)
+        l1u = eps(Float32)
+    else
+        l1u = parse(Int64, parsed_args["l1u"])
+    end
+
+    if parsed_args["l1v"] == eps(Float32)
+        l1v = eps(Float32)
+    else
+        l1v = parse(Int64, parsed_args["l1v"])
+    end
+
+    if parsed_args["l2u"] == eps(Float32)
+        l2u = eps(Float32)
+    else
+        l2u = parse(Int64, parsed_args["l2u"])
+    end
+
+    if parsed_args["l2v"] == eps(Float32)
+        l2v = eps(Float32)
+    else
+        l2v = parse(Int64, parsed_args["l2v"])
+    end
+
+    if parsed_args["dim"] == eps(Float32)
+        dim = eps(Float32)
+    else
+        dim = parse(Int64, parsed_args["dim"])
+    end
+    
     if parsed_args["numepoch"] == 5
         numepoch = 5
     else

@@ -29,8 +29,8 @@ Input Arguments
 
 Output Arguments
 ---------
-- `U` : Factor matrix (No. columns of the data matrix × dim)
-- `V` : Factor matrix (No. rows of the data matrix × dim)
+- `U` : Factor matrix (No. rows of the data matrix × dim)
+- `V` : Factor matrix (No. columns of the data matrix × dim)
 - stop : Whether the calculation is converged
 """
 function dnmf(;

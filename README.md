@@ -1,13 +1,14 @@
 # OnlineNMF.jl
 Online Non-negative Matrix Factorization
 
-[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://rikenbit.github.io/OnlineNMF.jl/stable)
-[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://rikenbit.github.io/OnlineNMF.jl/latest)
-[![Build Status](https://travis-ci.org/rikenbit/OnlineNMF.jl.svg?branch=master)](https://travis-ci.org/rikenbit/OnlineNMF.jl)
+[![Build Status](https://github.com/rikenbit/OnlineNMF.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/rikenbit/OnlineNMF.jl/actions/workflows/CI.yml?query=branch%3Amaster)
 [![DOI](https://zenodo.org/badge/170862070.svg)](https://doi.org/10.5281/zenodo.8199413)
 
+## 📚 Documentation
+[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://rikenbit.github.io/OnlineNMF.jl/latest)
+
 ## Description
-OnlineNMF.jl performs some online-NMF functions for extreamly large scale matrices.
+OnlineNMF.jl performs some online-NMF functions for extreamly large scale matrix.
 
 ## Algorithms
 
@@ -25,8 +26,9 @@ OnlineNMF.jl performs some online-NMF functions for extreamly large scale matric
 ## Installation
 <!-- ```julia
 julia> using Pkg
-julia> Pkg.add("OnlinePCA")
-julia> Pkg.add("OnlineNMF")
+julia> Pkg.add(url="https://github.com/rikenbit/OnlinePCA.jl.git")
+julia> Pkg.add(url="https://github.com/rikenbit/OnlineNMF.jl.git")
+julia> Pkg.add("PlotlyJS")
 ```
  -->
 ```julia
@@ -41,8 +43,8 @@ julia> Pkg.add("OnlineNMF")
 ### Preprocess of CSV
 ```julia
 using OnlinePCA
-using OnlinePCA: readcsv, writecsv
-# using OnlineNMF
+using OnlinePCA: write_csv
+using OnlineNMF
 using Distributions
 using DelimitedFiles
 using SparseArrays
@@ -54,7 +56,7 @@ data = rand(Binomial(10, 0.05), 300, 99)
 data[1:50, 1:33] .= 100*data[1:50, 1:33]
 data[51:100, 34:66] .= 100*data[51:100, 34:66]
 data[101:150, 67:99] .= 100*data[101:150, 67:99]
-writecsv(joinpath(tmp, "Data.csv"), data)
+write_csv(joinpath(tmp, "Data.csv"), data)
 
 # Matrix Market (MM)
 mmwrite(joinpath(tmp, "Data.mtx"), sparse(data))
@@ -73,11 +75,11 @@ using PlotlyJS
 
 function subplots(out_nmf, group)
 	# data frame
-	data_left = DataFrame(pc1=out_nmf[2][:,1], pc2=out_nmf[2][:,2], group=group)
-	data_right = DataFrame(pc2=out_nmf[2][:,2], pc3=out_nmf[2][:,3], group=group)
+	data_left = DataFrame(nmf1=out_nmf[1][:,1], nmf2=out_nmf[1][:,2], group=group)
+	data_right = DataFrame(nmf2=out_nmf[1][:,2], nmf3=out_nmf[1][:,3], group=group)
 	# plot
-	p_left = Plot(data_left, x=:pc1, y=:pc2, mode="markers", marker_size=10, group=:group)
-	p_right = Plot(data_right, x=:pc2, y=:pc3, mode="markers", marker_size=10,
+	p_left = Plot(data_left, x=:nmf1, y=:nmf2, mode="markers", marker_size=10, group=:group)
+	p_right = Plot(data_right, x=:nmf2, y=:nmf3, mode="markers", marker_size=10,
 	group=:group, showlegend=false)
 	p_left.data[1]["marker_color"] = "red"
 	p_left.data[2]["marker_color"] = "blue"
@@ -88,77 +90,81 @@ function subplots(out_nmf, group)
 	p_left.data[1]["name"] = "group1"
 	p_left.data[2]["name"] = "group2"
 	p_left.data[3]["name"] = "group3"
-	p_left.layout["title"] = "PC1 vs PC2"
-	p_right.layout["title"] = "PC2 vs PC3"
-	p_left.layout["xaxis_title"] = "pc1"
-	p_left.layout["yaxis_title"] = "pc2"
-	p_right.layout["xaxis_title"] = "pc2"
-	p_right.layout["yaxis_title"] = "pc3"
+	p_left.layout["title"] = "Component 1 vs Component 2"
+	p_right.layout["title"] = "Component 2 vs Component 3"
+	p_left.layout["xaxis_title"] = "nmf-1"
+	p_left.layout["yaxis_title"] = "nmf-2"
+	p_right.layout["xaxis_title"] = "nmf-2"
+	p_right.layout["yaxis_title"] = "nmf-3"
 	plot([p_left p_right])
 end
 
-group=vcat(repeat(["group1"],inner=33), repeat(["group2"],inner=33), repeat(["group3"],inner=33))
+group=vcat(repeat(["group1"],inner=100), repeat(["group2"],inner=100), repeat(["group3"],inner=100))
 ```
 
 ### NMF based on Alpha-Divergence
 ```julia
-out_nmf_alpha = nmf(input=joinpath(tmp, "Data.zst"), dim=3, alpha=1, algorithm="alpha")
+out_nmf_alpha = nmf(input=joinpath(tmp, "Data.zst"), dim=3, alpha=1, numepoch=30, algorithm="alpha")
 
 subplots(out_nmf_alpha, group)
 ```
+![NMF_ALPHA](./docs/src/figure/nmf_alpha.png)
 
 ### NMF based on Beta-Divergence
 ```julia
-out_nmf_beta = nmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=2, algorithm="beta")
+out_nmf_beta = nmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=2, numepoch=30, algorithm="beta")
 
 subplots(out_nmf_beta, group)
 ```
+![NMF_BETA](./docs/src/figure/nmf_beta.png)
+
 ### Semi-Binary MF based on Beta-Divergence
 ```julia
-out_shmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, binu=10^2)
+out_dnmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, numepoch=30, binu=10^2)
 minimum(out_dnmf_beta[1])
 maximum(out_dnmf_beta[1])
 
-subplots(out_nmf_beta, group)
+subplots(out_dnmf_beta, group)
 ```
-
-### Semi-Ternary MF based on Beta-Divergence
-```julia
-out_stmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, teru=10^2)
-minimum(out_dnmf_beta[1])
-median(out_dnmf_beta[1])
-maximum(out_dnmf_beta[1])
-
-subplots(out_nmf_beta, group)
-```
+![DNMF](./docs/src/figure/dnmf.png)
 
 ### Sparse-NMF based on Alpha-Divergence
 ```julia
-out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1, algorithm="alpha")
+out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1, numepoch=30, algorithm="alpha")
 
-subplots(out_nmf_alpha, group)
+subplots(out_sparse_nmf_alpha, group)
 ```
+![SPARSE_NMF_ALPHA](./docs/src/figure/sparse_nmf_alpha.png)
 
 ### Sparse-NMF based on Beta-Divergence
 ```julia
-out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, algorithm="beta")
+out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, numepoch=30, algorithm="beta")
 
-subplots(out_nmf_beta, group)
+subplots(out_sparse_nmf_beta, group)
 ```
+![SPARSE_NMF_BETA](./docs/src/figure/sparse_nmf_beta.png)
+
 ### Sparse-DNMF based on Beta-Divergence
 ```julia
-out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2)
+out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=1, numepoch=30, binu=10^2)
+minimum(out_sparse_dnmf_beta[1])
+maximum(out_sparse_dnmf_beta[1])
 
-subplots(out_nmf_beta, group)
+subplots(out_sparse_dnmf_beta, group)
 ```
+![SPARSE_DNMF](./docs/src/figure/sparse_dnmf.png)
 
 ## Command line usage
-All the CSV preprocess functions and NMF functions also can be performed as command line tools with same parameter names like below.
+The type of input file is assumed to be CSV or MM formats, and then be processed by `csv2bin` or `mm2bin` in `OnlinePCA` package. The binary file is specified as the input of NMF functions in `OnlineNMF` package. The NMF functions also can be performed as command line tools with same parameter names like below.
 
 ```bash
 # CSV → Julia Binary
 julia YOUR_HOME_DIR/.julia/v0.x/OnlinePCA/bin/csv2bin \
     --csvfile Data.csv --binfile Data.zst
+
+# MM → Julia Binary
+julia YOUR_HOME_DIR/.julia/v0.x/OnlinePCA/bin/mm2bin \
+    --mmfile Data.mtx --binfile Data.mtx.zst
 
 # NMF based on Alpha-Divergence
 julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/nmf \

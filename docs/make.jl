@@ -1,12 +1,10 @@
 using Documenter
 using OnlineNMF
 
-makedocs()
-
 makedocs(
-    format = :html,
     sitename = "OnlineNMF.jl",
     modules = [OnlineNMF],
+    format = Documenter.HTML(),
     pages = [
         "Home" => "index.md",
         "Julia API" => "juliaapi.md",
@@ -15,7 +13,7 @@ makedocs(
 
 deploydocs(
     repo = "github.com/rikenbit/OnlineNMF.jl.git",
-    julia = "0.99",
+    devbranch = "master",
     target = "build",
     deps = nothing,
     make = nothing)
