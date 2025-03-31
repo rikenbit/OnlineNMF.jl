@@ -1,4 +1,4 @@
-FROM julia:1.10.4
+FROM julia:1.8.0-rc1-buster
 
 ENV JULIA_DEPOT_PATH=/usr/local/julia
 
