@@ -356,8 +356,8 @@ function init_sparse_dnmf(
     teru = convert(Float32, teru)
     terv = convert(Float32, terv)
     graphv = convert(Float32, graphv)
-    # Initialization by NMF
-    out_nmf = nmf(
+    # Initialization by Sparse-NMF
+    out_nmf = sparse_nmf(
         input=input,
         outdir=outdir,
         alpha=1,

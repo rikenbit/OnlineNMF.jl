@@ -1,6 +1,6 @@
 #####################################
 println("####### Sparse-NMF (Alpha, Julia API) #######")
-out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1, algorithm="alpha")
+out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1, algorithm="alpha", chunksize=51)
 
 @test size(out_sparse_nmf_alpha[1]) == (300, 3)
 @test size(out_sparse_nmf_alpha[2]) == (99, 3)
@@ -9,7 +9,7 @@ out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, al
 
 #####################################
 println("####### Sparse-NMF (Beta, Julia API) #######")
-out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, algorithm="beta")
+out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, algorithm="beta", chunksize=51)
 
 @test size(out_sparse_nmf_beta[1]) == (300, 3)
 @test size(out_sparse_nmf_beta[2]) == (99, 3)
@@ -19,7 +19,7 @@ out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, bet
 
 #####################################
 println("####### Sparse-NMF (Alpha, Command line) #######")
-run(`$(julia) $(joinpath(bindir, "sparse_nmf")) --input $(joinpath(tmp, "Data.mtx.zst")) --outdir $(tmp) --dim 3 --alpha 1 --algorithm alpha --logdir $(tmp)`)
+run(`$(julia) $(joinpath(bindir, "sparse_nmf")) --input $(joinpath(tmp, "Data.mtx.zst")) --outdir $(tmp) --dim 3 --alpha 1 --algorithm alpha --logdir $(tmp) --chunksize 51`)
 
 testfilesize(true,
 	joinpath(tmp, "U.csv"),
@@ -29,7 +29,7 @@ testfilesize(true,
 
 #####################################
 println("####### Sparse-NMF (Beta, Command line) #######")
-run(`$(julia) $(joinpath(bindir, "sparse_nmf")) --input $(joinpath(tmp, "Data.mtx.zst")) --outdir $(tmp) --dim 3 --beta 2 --algorithm beta --logdir $(tmp)`)
+run(`$(julia) $(joinpath(bindir, "sparse_nmf")) --input $(joinpath(tmp, "Data.mtx.zst")) --outdir $(tmp) --dim 3 --beta 2 --algorithm beta --logdir $(tmp) --chunksize 51`)
 
 testfilesize(true,
 	joinpath(tmp, "U.csv"),
