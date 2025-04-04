@@ -1,6 +1,6 @@
 #####################################
 println("####### Sparse-DNMF (Julia API) #######")
-out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2)
+out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, chunksize=51)
 
 @test size(out_sparse_dnmf_beta[1]) == (300, 3)
 @test size(out_sparse_dnmf_beta[2]) == (99, 3)
@@ -10,7 +10,7 @@ out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, b
 
 #####################################
 println("####### Sparse-DNMF (Command line) #######")
-run(`$(julia) $(joinpath(bindir, "sparse_dnmf")) --input $(joinpath(tmp, "Data.mtx.zst")) --outdir $(tmp) --dim 3 --beta 2 --logdir $(tmp)`)
+run(`$(julia) $(joinpath(bindir, "sparse_dnmf")) --input $(joinpath(tmp, "Data.mtx.zst")) --outdir $(tmp) --dim 3 --beta 2 --logdir $(tmp) --chunksize 51`)
 
 testfilesize(true,
 	joinpath(tmp, "U.csv"),
