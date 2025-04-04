@@ -2,7 +2,7 @@ name = "OnlineNMF"
 uuid = "e0c94d91-d830-4516-8b46-9a113d37a394"
 license = "MIT"
 authors = ["kokitsuyuzaki <koki.tsuyuzaki@gmail.com>"]
-version = "0.99.1"
+version = "0.99.2"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -23,5 +23,9 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 MatrixMarket = "0.5"
+CodecZstd = "0.8"
+PlotlyJS = "0.18"
+DelimitedFiles = "1"
+ArgParse = "1"
 Statistics = "1"
 julia = "1"

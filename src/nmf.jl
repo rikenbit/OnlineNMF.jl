@@ -406,7 +406,6 @@ function init_nmf(
     dim = convert(Int64, dim)
     numepoch = convert(Int64, numepoch)
     chunksize = convert(Int64, chunksize)
-    @assert chunksize <= N
     lower = convert(Float32, lower)
     upper = convert(Float32, upper)
     # Initialization of U and V
