@@ -187,7 +187,7 @@ subplots(out_bincoo_nmf_alpha, group)
 ```julia
 out_bincoo_nmf_beta = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=1, numepoch=10, algorithm="beta")
 
-subplots(out_bincoo_nmf_alpha, group)
+subplots(out_bincoo_nmf_beta, group)
 ```
 ![BinCOO_NMF_BETA](./docs/src/figure/bincoo_nmf_beta.png)
 
