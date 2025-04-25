@@ -17,13 +17,15 @@ using Random:
 using SparseArrays:
     sparse
 
-export output, parse_commandline, nmf, dnmf, sparse_nmf, sparse_dnmf, graph_laplacian
+export output, parse_commandline, nmf, dnmf, sparse_nmf, sparse_dnmf, bincoo_nmf, bincoo_dnmf, graph_laplacian
 
 include("Utils.jl")
 include("nmf.jl")
 include("dnmf.jl")
 include("sparse_nmf.jl")
 include("sparse_dnmf.jl")
+include("bincoo_nmf.jl")
+include("bincoo_dnmf.jl")
 include("graph_laplacian.jl")
 
 end

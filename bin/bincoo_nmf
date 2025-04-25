@@ -1,0 +1,131 @@
+using OnlineNMF
+using ArgParse:
+    ArgParseSettings, parse_args, @add_arg_table
+
+# main
+function main()
+    nmfmodel = OnlineNMF.BINCOO_NMF()
+    parsed_args = OnlineNMF.parse_commandline(nmfmodel)
+    println("Parsed args:")
+    for (arg, val) in parsed_args
+        println("  $arg  =>  ", repr(val))
+    end
+
+    if parsed_args["alpha"] == 1
+        alpha = 1
+    else
+        alpha = parse(Int64, parsed_args["alpha"])
+    end
+
+    if parsed_args["beta"] == 2
+        beta = 2
+    else
+        beta = parse(Int64, parsed_args["beta"])
+    end
+
+    if parsed_args["graphv"] == eps(Float32)
+        graphv = eps(Float32)
+    else
+        graphv = parse(Int64, parsed_args["graphv"])
+    end
+
+    if parsed_args["l1u"] == eps(Float32)
+        l1u = eps(Float32)
+    else
+        l1u = parse(Int64, parsed_args["l1u"])
+    end
+
+    if parsed_args["l1v"] == eps(Float32)
+        l1v = eps(Float32)
+    else
+        l1v = parse(Int64, parsed_args["l1v"])
+    end
+
+    if parsed_args["l2u"] == eps(Float32)
+        l2u = eps(Float32)
+    else
+        l2u = parse(Int64, parsed_args["l2u"])
+    end
+
+    if parsed_args["l2v"] == eps(Float32)
+        l2v = eps(Float32)
+    else
+        l2v = parse(Int64, parsed_args["l2v"])
+    end
+
+    if parsed_args["dim"] == eps(Float32)
+        dim = eps(Float32)
+    else
+        dim = parse(Int64, parsed_args["dim"])
+    end
+
+    if parsed_args["numepoch"] == 5
+        numepoch = 5
+    else
+        numepoch = parse(Int64, parsed_args["numepoch"])
+    end
+
+    if parsed_args["chunksize"] == 1
+        chunksize = 1
+    else
+        chunksize = parse(Int64, parsed_args["chunksize"])
+    end
+
+    if parsed_args["lower"] == 0
+        lower = 0
+    else
+        lower = parse(Float32, parsed_args["lower"])
+    end
+
+    if parsed_args["upper"] == 1.0f+38
+        upper = 1.0f+38
+    else
+        upper = parse(Float32, parsed_args["upper"])
+    end
+
+    if parsed_args["initU"] == nothing
+        initU = parsed_args["initU"]
+    else
+        initU = String(parsed_args["initU"])
+    end
+
+    if parsed_args["initV"] == nothing
+        initV = parsed_args["initV"]
+    else
+        initV = String(parsed_args["initV"])
+    end
+
+    if parsed_args["initL"] == nothing
+        initL = parsed_args["initL"]
+    else
+        initL = String(parsed_args["initL"])
+    end
+
+    if parsed_args["logdir"] == nothing
+        logdir = parsed_args["logdir"]
+    else
+        logdir = String(parsed_args["logdir"])
+    end
+
+    out = OnlineNMF.bincoo_nmf(input=parsed_args["input"],
+        alpha=alpha,
+        beta=beta,
+        graphv=graphv,
+        l1u=l1u,
+        l1v=l1v,
+        l2u=l2u,
+        l2v=l2v,
+        dim=dim,
+        numepoch=numepoch,
+        chunksize=chunksize,
+        algorithm=parsed_args["algorithm"],
+        lower=lower,
+        upper=upper,
+        initU=initU,
+        initV=initV,
+        initL=initL,
+        logdir=logdir)
+    OnlineNMF.output(parsed_args["outdir"], out, lower)
+end
+
+main()

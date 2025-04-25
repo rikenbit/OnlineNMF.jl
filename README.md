@@ -61,11 +61,32 @@ write_csv(joinpath(tmp, "Data.csv"), data)
 # Matrix Market (MM)
 mmwrite(joinpath(tmp, "Data.mtx"), sparse(data))
 
+# Binary COO (BinCOO)
+data2 = zeros(Int, 300, 99)
+data2[1:50, 1:33] .= 1
+data2[51:100, 34:66] .= 1
+data2[101:150, 67:99] .= 1
+data2[151:300, :] .= 1
+
+bincoofile = joinpath(tmp, "Data.bincoo")
+open(bincoofile, "w") do io
+    for i in 1:size(data2, 1)
+        for j in 1:size(data2, 2)
+            if data2[i, j] != 0
+                println(io, "$i $j")
+            end
+        end
+    end
+end
+
 # Binarization (Zstandard)
 csv2bin(csvfile=joinpath(tmp, "Data.csv"), binfile=joinpath(tmp, "Data.zst"))
 
 # Sparsification (Zstandard + MM format)
 mm2bin(mmfile=joinpath(tmp, "Data.mtx"), binfile=joinpath(tmp, "Data.mtx.zst"))
+
+# Binarziation (BinCOO + Zstandard)
+bincoo2bin(bincoofile=bincoofile, binfile=joinpath(tmp, "Data.bincoo.zst"))
 ```
 
 ### Setting for plot
@@ -154,6 +175,32 @@ subplots(out_sparse_dnmf_beta, group)
 ```
 ![SPARSE_DNMF](./docs/src/figure/sparse_dnmf.png)
 
+### BinCOO-NMF based on Alpha-Divergence
+```julia
+out_bincoo_nmf_alpha = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, alpha=1, numepoch=10, algorithm="alpha")
+
+subplots(out_bincoo_nmf_alpha, group)
+```
+![BinCOO_NMF_ALPHA](./docs/src/figure/bincoo_nmf_alpha.png)
+
+### BinCOO-NMF based on Beta-Divergence
+```julia
+out_bincoo_nmf_beta = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=1, numepoch=10, algorithm="beta")
+
+subplots(out_bincoo_nmf_alpha, group)
+```
+![BinCOO_NMF_BETA](./docs/src/figure/bincoo_nmf_beta.png)
+
+### BinCOO-NMF based on Beta-Divergence
+```julia
+out_bincoo_dnmf_beta = bincoo_dnmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=1, numepoch=10, binu=10^2)
+minimum(out_bincoo_dnmf_beta[1])
+maximum(out_bincoo_dnmf_beta[1])
+
+subplots(out_bincoo_dnmf_beta, group)
+```
+![BinCOO_DNMF](./docs/src/figure/bincoo_dnmf.png)
+
 ## Command line usage
 The type of input file is assumed to be CSV or MM formats, and then be processed by `csv2bin` or `mm2bin` in `OnlinePCA` package. The binary file is specified as the input of NMF functions in `OnlineNMF` package. The NMF functions also can be performed as command line tools with same parameter names like below.
 
@@ -194,6 +241,21 @@ julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/sparse_nmf \
 # Sparse-DNMF based on Beta-Divergence
 julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/sparse_dnmf \
     --input Data.mtx.zst --dim 3 \
+    --numepoch 10 --beta 2
+
+# BinCOO-NMF based on Alpha-Divergence
+julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/bincoo_nmf \
+    --input Data.bincoo.zst --dim 3 \
+    --numepoch 10 --alpha 1
+
+# BinCOO-NMF based on Beta-Divergence
+julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/bincoo_nmf \
+    --input Data.bincoo.zst --dim 3 \
+    --numepoch 10 --beta 2
+
+# BinCOO-DNMF based on Beta-Divergence
+julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/bincoo_dnmf \
+    --input Data.bincoo.zst --dim 3 \
     --numepoch 10 --beta 2
 ```
 

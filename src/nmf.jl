@@ -68,7 +68,7 @@ function nmf(;
     M,
     numepoch,
     chunksize,
-    algorithm,
+    algorithm_type,
     logdir,
     lower,
     upper = init_nmf(
@@ -108,7 +108,7 @@ function nmf(;
         M,
         numepoch,
         chunksize,
-        algorithm,
+        algorithm_type,
         logdir,
         lower,
         upper,
@@ -137,7 +137,7 @@ function each_nmf(
     M,
     numepoch,
     chunksize,
-    algorithm,
+    algorithm_type,
     logdir,
     lower,
     upper,
@@ -151,25 +151,12 @@ function each_nmf(
     while (stop == 0 && s <= numepoch)
         next!(progress)
         # Update U
-        U = update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm)
+        U = update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type)
         # NaN
         checkNaN(U)
         # Update V
-        V = update_V(
-            input,
-            N,
-            M,
-            U,
-            V,
-            L,
-            alpha,
-            beta,
-            graphv,
-            l1v,
-            l2v,
-            chunksize,
-            algorithm,
-        )
+        V = update_V(input, N, M, U, V, L, alpha, beta, graphv, l1v,
+            l2v, chunksize, algorithm_type)
         # NaN
         checkNaN(V)
         # Normalization
@@ -187,7 +174,7 @@ function each_nmf(
 end
 
 # Update U (Alpha-divergence)
-function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm::ALPHA)
+function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type::ALPHA)
     numer = update_U_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_U_denom_ALPHA(N, V)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1 / alpha))
@@ -218,11 +205,11 @@ function update_U_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
 end
 
 function update_U_denom_ALPHA(N, V)
-    ones(Int64(N), 1) * sum(V, dims=1)
+    @turbo ones(Int64(N), 1) * sum(V, dims=1)
 end
 
 # Update U (Beta-divergence)
-function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm::BETA)
+function update_U(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type::BETA)
     numer = update_U_numer_BETA(input, N, M, U, V, beta, chunksize)
     denom = update_U_denom_BETA(N, U, V, beta, l1u, l2u, chunksize)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ rho(beta))
@@ -280,7 +267,7 @@ function update_V(
     l1v,
     l2v,
     chunksize,
-    algorithm::ALPHA,
+    algorithm_type::ALPHA,
 )
     numer = update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_V_denom_ALPHA(M, U)
@@ -312,7 +299,7 @@ function update_V_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
 end
 
 function update_V_denom_ALPHA(M, U)
-    ones(Int64(M), 1) * sum(U, dims=1)
+    @turbo ones(Int64(M), 1) * sum(U, dims=1)
 end
 
 # Update V (Beta-divergence)
@@ -413,7 +400,7 @@ function init_nmf(
     V = load_or_random(initV, M, dim)
     L = load_or_random(initL, M, M, true)
     # Algorithm setting
-    algorithm, alpha, beta = select_algorithm(algorithm, alpha, beta)
+    algorithm_type, alpha, beta = select_algorithm(algorithm, alpha, beta)
     # directory setting
     if logdir isa String
         if !isdir(logdir)
@@ -434,7 +421,7 @@ function init_nmf(
     M,
     numepoch,
     chunksize,
-    algorithm,
+    algorithm_type,
     logdir,
     lower,
     upper

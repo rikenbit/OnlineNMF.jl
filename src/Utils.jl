@@ -3,6 +3,8 @@ struct NMF end
 struct DNMF end
 struct SPARSE_NMF end
 struct SPARSE_DNMF end
+struct BINCOO_NMF end
+struct BINCOO_DNMF end
 struct ALPHA end
 struct BETA end
 
@@ -47,7 +49,6 @@ function select_algorithm(algorithm::AbstractString, alpha::Number, beta::Number
     end
 
     if algorithm in ("pearson", "hellinger", "neyman", "alpha")
-        algorithm = ALPHA()
         alpha = if algorithm == "pearson"
             2
         elseif algorithm == "hellinger"
@@ -57,8 +58,8 @@ function select_algorithm(algorithm::AbstractString, alpha::Number, beta::Number
         else
             alpha
         end
+        algorithm_type = ALPHA()
     elseif algorithm in ("frobenius", "kl", "is", "beta")
-        algorithm = BETA()
         beta = if algorithm == "frobenius"
             2
         elseif algorithm == "kl"
@@ -68,23 +69,25 @@ function select_algorithm(algorithm::AbstractString, alpha::Number, beta::Number
         else
             beta
         end
+        algorithm_type = BETA()
     end
-    return algorithm, alpha, beta
+    return algorithm_type, alpha, beta
 end
 
 # Rho function (Beta-divergence)
 function rho(beta; root=false)
     if root
-        return 0.5
+        new_beta = 0.5
     else
         if beta < 1
-            return 1 / (2 - beta)
+            new_beta = 1 / (2 - beta)
         elseif 1 <= beta && beta <= 2
-            return 1
+            new_beta = 1
         elseif beta > 2
-            return 1 / (beta - 1)
+            new_beta = 1 / (beta - 1)
         end
     end
+    return Float32(new_beta)
 end
 
 # Check NaN value
@@ -109,7 +112,7 @@ read_csv(filename::AbstractString) = readdlm(filename, ',')
 read_csv(filename::AbstractString, ::Type{T}) where {T} = readdlm(filename, ',', T)
 
 # Parse command line options
-function parse_commandline(nmfmodel::Union{NMF,SPARSE_NMF})
+function parse_commandline(nmfmodel::Union{NMF,SPARSE_NMF,BINCOO_NMF})
     s = ArgParseSettings()
 
     @add_arg_table! s begin
@@ -196,7 +199,7 @@ function parse_commandline(nmfmodel::Union{NMF,SPARSE_NMF})
 end
 
 # Parse command line options
-function parse_commandline(nmfmodel::Union{DNMF,SPARSE_DNMF})
+function parse_commandline(nmfmodel::Union{DNMF,SPARSE_DNMF,BINCOO_DNMF})
     s = ArgParseSettings()
 
     @add_arg_table! s begin
@@ -312,7 +315,7 @@ function outputlog(
     V::AbstractArray,
     lower::Number,
     upper::Number,
-    nmfmodel::Union{NMF,DNMF,SPARSE_NMF,SPARSE_DNMF},
+    nmfmodel::Union{NMF,DNMF,SPARSE_NMF,SPARSE_DNMF,BINCOO_NMF,BINCOO_DNMF},
     chunksize::Number,
 )
     stop = 0
@@ -428,6 +431,70 @@ function RecError(
             resize!(vals, count)
             if count > 0
                 X_chunk = sparse(rows, cols, vals, batch_size, M)
+            else
+                X_chunk = spzeros(batch_size, M)
+            end
+            U_chunk = @view U[n:n+batch_size-1, :]
+            E += Float32(sum((Matrix(X_chunk) - U_chunk * V') .^ 2))
+            n += batch_size
+        end
+        close(stream)
+    end
+    @assert E isa Float32
+    return E
+end
+
+function RecError(
+    input::AbstractString,
+    U::AbstractArray,
+    V::AbstractArray,
+    nmfmodel::Union{BINCOO_NMF,BINCOO_DNMF},
+    chunksize::Number,
+)
+    N = zeros(UInt32, 1)
+    M = zeros(UInt32, 1)
+    E = 0.0f0
+    open(input, "r") do file
+        stream = ZstdDecompressorStream(file)
+        read!(stream, N)
+        read!(stream, M)
+        N, M = N[], M[]
+        overflow_buf = UInt32[]
+        n = 1
+        while n <= N
+            batch_size = min(chunksize, N - n + 1)
+            max_size = (batch_size + 1) * M # For overflow
+            rows = zeros(UInt32, max_size)
+            cols = zeros(UInt32, max_size)
+            count = 0
+            ############### Overflow buffer ###############
+            if length(overflow_buf) > 0
+                count += 1
+                # Re-mapping row index
+                rows[count] = overflow_buf[1] - n + 1
+                cols[count] = overflow_buf[2]
+                empty!(overflow_buf)
+            end
+            ###############################################
+            while !eof(stream)
+                buf = zeros(UInt32, 2)
+                read!(stream, buf)
+                row, col = buf[1], buf[2]
+                if n ≤ row < n + batch_size
+                    count += 1
+                    # Re-mapping row index
+                    rows[count] = row - n + 1
+                    cols[count] = col
+                else
+                    overflow_buf = buf
+                    break
+                end
+            end
+            # Remove 0s from the end
+            resize!(rows, count)
+            resize!(cols, count)
+            if count > 0
+                X_chunk = sparse(rows, cols, 1, batch_size, M)
             else
                 X_chunk = spzeros(batch_size, M)
             end

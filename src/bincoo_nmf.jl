@@ -1,5 +1,5 @@
 """
-    sparse_nmf(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, alpha::Number=1, beta::Number=2, graphv::Number=0, l1u::Number=eps(Float32), l1v::Number=eps(Float32), l2u::Number=eps(Float32), l2v::Number=eps(Float32), dim::Number=3, numepoch::Number=5, chunksize::Number=1, algorithm::AbstractString="frobenius", lower::Number=0, upper::Number=1.0f+38, initU::Union{Nothing,AbstractString}=nothing, initV::Union{Nothing,AbstractString}=nothing, initL::Union{Nothing,AbstractString}=nothing, logdir::Union{Nothing,AbstractString}=nothing)
+    bincoo_nmf(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, alpha::Number=1, beta::Number=2, graphv::Number=0, l1u::Number=eps(Float32), l1v::Number=eps(Float32), l2u::Number=eps(Float32), l2v::Number=eps(Float32), dim::Number=3, numepoch::Number=5, chunksize::Number=1, algorithm::AbstractString="frobenius", lower::Number=0, upper::Number=1.0f+38, initU::Union{Nothing,AbstractString}=nothing, initV::Union{Nothing,AbstractString}=nothing, initL::Union{Nothing,AbstractString}=nothing, logdir::Union{Nothing,AbstractString}=nothing)
 
     Sparse Non-negative Matrix Factorization (SNMF).
 
@@ -31,7 +31,7 @@ Output Arguments
 - `V` : Factor matrix (No. columns of the data matrix × dim)
 - stop : Whether the calculation is converged
 """
-function sparse_nmf(;
+function bincoo_nmf(;
     input::AbstractString="",
     outdir::Union{Nothing,AbstractString}=nothing,
     alpha::Number=1,
@@ -53,7 +53,7 @@ function sparse_nmf(;
     logdir::Union{Nothing,AbstractString}=nothing,
 )
     # Initial Setting
-    nmfmodel = SPARSE_NMF()
+    nmfmodel = BINCOO_NMF()
     alpha,
     beta,
     graphv,
@@ -71,7 +71,7 @@ function sparse_nmf(;
     algorithm_type,
     logdir,
     lower,
-    upper = init_sparse_nmf(
+    upper = init_bincoo_nmf(
         input,
         alpha,
         beta,
@@ -92,7 +92,7 @@ function sparse_nmf(;
         upper
     )
     # Perform NMF
-    out = each_sparse_nmf(
+    out = each_bincoo_nmf(
         input,
         alpha,
         beta,
@@ -121,7 +121,7 @@ function sparse_nmf(;
     return out
 end
 
-function each_sparse_nmf(
+function each_bincoo_nmf(
     input,
     alpha,
     beta,
@@ -151,11 +151,11 @@ function each_sparse_nmf(
     while (stop == 0 && s <= numepoch)
         next!(progress)
         # Update U
-        U = update_spU(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type)
+        U = update_bcU(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type)
         # NaN
         checkNaN(U)
         # Update V
-        V = update_spV(input, N, M, U, V, L, alpha, beta, graphv,
+        V = update_bcV(input, N, M, U, V, L, alpha, beta, graphv,
             l1v, l2v, chunksize, algorithm_type)
         # NaN
         checkNaN(V)
@@ -174,14 +174,14 @@ function each_sparse_nmf(
 end
 
 # Update U (Alpha-divergence)
-function update_spU(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type::ALPHA)
-    numer = update_spU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
+function update_bcU(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type::ALPHA)
+    numer = update_bcU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_U_denom_ALPHA(N, V)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1 / alpha))
     U .* update_factor
 end
 
-function update_spU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
+function update_bcU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     numer = zeros(size(U))
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
@@ -196,7 +196,6 @@ function update_spU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            vals = zeros(UInt32, max_size)
             count = 0
             ############### Overflow buffer ###############
             if length(overflow_buf) > 0
@@ -204,20 +203,18 @@ function update_spU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
                 # Re-mapping row index
                 rows[count] = overflow_buf[1] - n + 1
                 cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
                 empty!(overflow_buf)
             end
             ###############################################
             while !eof(stream)
-                buf = zeros(UInt32, 3)
+                buf = zeros(UInt32, 2)
                 read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
+                row, col = buf[1], buf[2]
                 if n ≤ row < n + batch_size
                     count += 1
                     # Re-mapping row index
                     rows[count] = row - n + 1
                     cols[count] = col
-                    vals[count] = val
                 else
                     overflow_buf = buf
                     break
@@ -226,9 +223,8 @@ function update_spU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
-            resize!(vals, count)
             if count > 0
-                X_chunk = sparse(rows, cols, vals, batch_size, M)
+                X_chunk = sparse(rows, cols, 1, batch_size, M)
             else
                 X_chunk = spzeros(batch_size, M)
             end
@@ -242,14 +238,14 @@ function update_spU_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
 end
 
 # Update U (Beta-divergence)
-function update_spU(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type::BETA)
-    numer = update_spU_numer_BETA(input, N, M, U, V, beta, chunksize)
+function update_bcU(input, N, M, U, V, alpha, beta, l1u, l2u, chunksize, algorithm_type::BETA)
+    numer = update_bcU_numer_BETA(input, N, M, U, V, beta, chunksize)
     denom = update_U_denom_BETA(N, U, V, beta, l1u, l2u, chunksize)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ rho(beta))
     U .* update_factor
 end
 
-function update_spU_numer_BETA(input, N, M, U, V, beta, chunksize)
+function update_bcU_numer_BETA(input, N, M, U, V, beta, chunksize)
     numer = zeros(size(U))
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
@@ -264,7 +260,6 @@ function update_spU_numer_BETA(input, N, M, U, V, beta, chunksize)
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            vals = zeros(UInt32, max_size)
             count = 0
             ############### Overflow buffer ###############
             if length(overflow_buf) > 0
@@ -272,20 +267,18 @@ function update_spU_numer_BETA(input, N, M, U, V, beta, chunksize)
                 # Re-mapping row index
                 rows[count] = overflow_buf[1] - n + 1
                 cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
                 empty!(overflow_buf)
             end
             ###############################################
             while !eof(stream)
-                buf = zeros(UInt32, 3)
+                buf = zeros(UInt32, 2)
                 read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
+                row, col = buf[1], buf[2]
                 if n ≤ row < n + batch_size
                     count += 1
                     # Re-mapping row index
                     rows[count] = row - n + 1
                     cols[count] = col
-                    vals[count] = val
                 else
                     overflow_buf = buf
                     break
@@ -294,9 +287,8 @@ function update_spU_numer_BETA(input, N, M, U, V, beta, chunksize)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
-            resize!(vals, count)
             if count > 0
-                X_chunk = sparse(rows, cols, vals, batch_size, M)
+                X_chunk = sparse(rows, cols, 1, batch_size, M)
             else
                 X_chunk = spzeros(batch_size, M)
             end
@@ -311,7 +303,7 @@ function update_spU_numer_BETA(input, N, M, U, V, beta, chunksize)
 end
 
 # Update V (Alpha-divergence)
-function update_spV(
+function update_bcV(
     input,
     N,
     M,
@@ -326,13 +318,13 @@ function update_spV(
     chunksize,
     algorithm_type::ALPHA,
 )
-    numer = update_spV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
+    numer = update_bcV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     denom = update_V_denom_ALPHA(M, U)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ (1 / alpha))
     V .* update_factor
 end
 
-function update_spV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
+function update_bcV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
     numer = zeros(size(V))
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
@@ -347,7 +339,6 @@ function update_spV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            vals = zeros(UInt32, max_size)
             count = 0
             ############### Overflow buffer ###############
             if length(overflow_buf) > 0
@@ -355,20 +346,18 @@ function update_spV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
                 # Re-mapping row index
                 rows[count] = overflow_buf[1] - n + 1
                 cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
                 empty!(overflow_buf)
             end
             ###############################################
             while !eof(stream)
-                buf = zeros(UInt32, 3)
+                buf = zeros(UInt32, 2)
                 read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
+                row, col = buf[1], buf[2]
                 if n ≤ row < n + batch_size
                     count += 1
                     # Re-mapping row index
                     rows[count] = row - n + 1
                     cols[count] = col
-                    vals[count] = val
                 else
                     overflow_buf = buf
                     break
@@ -377,9 +366,8 @@ function update_spV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
-            resize!(vals, count)
             if count > 0
-                X_chunk = sparse(rows, cols, vals, batch_size, M)
+                X_chunk = sparse(rows, cols, 1, batch_size, M)
             else
                 X_chunk = spzeros(batch_size, M)
             end
@@ -393,7 +381,7 @@ function update_spV_numer_ALPHA(input, N, M, U, V, alpha, chunksize)
 end
 
 # Update V (Beta-divergence)
-function update_spV(
+function update_bcV(
     input,
     N,
     M,
@@ -408,13 +396,13 @@ function update_spV(
     chunksize,
     algorithm_type::BETA,
 )
-    numer = update_spV_numer_BETA(input, N, M, U, V, beta, chunksize)
+    numer = update_bcV_numer_BETA(input, N, M, U, V, beta, chunksize)
     denom = update_V_denom_BETA(N, U, V, L, beta, graphv, l1v, l2v, chunksize)
     update_factor = ifelse.(denom .== 0, 1.0, (numer ./ denom) .^ rho(beta))
     V .* update_factor
 end
 
-function update_spV_numer_BETA(input, N, M, U, V, beta, chunksize)
+function update_bcV_numer_BETA(input, N, M, U, V, beta, chunksize)
     numer = zeros(size(V))
     open(input, "r") do file
         stream = ZstdDecompressorStream(file)
@@ -429,7 +417,6 @@ function update_spV_numer_BETA(input, N, M, U, V, beta, chunksize)
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            vals = zeros(UInt32, max_size)
             count = 0
             ############### Overflow buffer ###############
             if length(overflow_buf) > 0
@@ -437,20 +424,18 @@ function update_spV_numer_BETA(input, N, M, U, V, beta, chunksize)
                 # Re-mapping row index
                 rows[count] = overflow_buf[1] - n + 1
                 cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
                 empty!(overflow_buf)
             end
             ###############################################
             while !eof(stream)
-                buf = zeros(UInt32, 3)
+                buf = zeros(UInt32, 2)
                 read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
+                row, col = buf[1], buf[2]
                 if n ≤ row < n + batch_size
                     count += 1
                     # Re-mapping row index
                     rows[count] = row - n + 1
                     cols[count] = col
-                    vals[count] = val
                 else
                     overflow_buf = buf
                     break
@@ -459,9 +444,8 @@ function update_spV_numer_BETA(input, N, M, U, V, beta, chunksize)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
-            resize!(vals, count)
             if count > 0
-                X_chunk = sparse(rows, cols, vals, batch_size, M)
+                X_chunk = sparse(rows, cols, 1, batch_size, M)
             else
                 X_chunk = spzeros(batch_size, M)
             end
@@ -475,7 +459,7 @@ function update_spV_numer_BETA(input, N, M, U, V, beta, chunksize)
 end
 
 # Initialization step in NMF
-function init_sparse_nmf(
+function init_bincoo_nmf(
     input::AbstractString,
     alpha::Number,
     beta::Number,

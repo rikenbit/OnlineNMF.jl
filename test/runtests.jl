@@ -35,6 +35,18 @@ write_csv(joinpath(tmp, "Data.csv"), data)
 # Matrix Market (MM)
 mmwrite(joinpath(tmp, "Data.mtx"), sparse(data))
 
+# Binary COO (BinCOO)
+bincoofile = joinpath(tmp, "Data.bincoo")
+open(bincoofile, "w") do io
+    for i in 1:size(data, 1)
+        for j in 1:size(data, 2)
+            if data[i, j] != 0
+                println(io, "$i $j")
+            end
+        end
+    end
+end
+
 # CSV => Zstandard
 csv2bin(csvfile=joinpath(tmp, "Data.csv"),
 	binfile=joinpath(tmp, "Data.zst"))
@@ -43,6 +55,9 @@ csv2bin(csvfile=joinpath(tmp, "Data.csv"),
 mm2bin(mmfile=joinpath(tmp, "Data.mtx"),
 	binfile=joinpath(tmp, "Data.mtx.zst"))
 
+# Binarziation (BinCOO + Zstandard)
+bincoo2bin(bincoofile=bincoofile, binfile=joinpath(tmp, "Data.bincoo.zst"))
+
 # Tests
 println("Running all tests...")
 
@@ -50,5 +65,7 @@ include("test_nmf.jl")
 include("test_dnmf.jl")
 include("test_sparse_nmf.jl")
 include("test_sparse_dnmf.jl")
+include("test_bincoo_nmf.jl")
+include("test_bincoo_dnmf.jl")
 
 println("All tests completed.")
