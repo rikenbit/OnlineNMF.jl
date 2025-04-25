@@ -8,6 +8,5 @@ RUN apt-get update \
 	&& rm -rf /var/lib/apt/lists/* \
     && julia -e 'using Pkg; Pkg.Registry.add("General"); \
 	Pkg.add(url="https://github.com/rikenbit/OnlinePCA.jl"); \
-	Pkg.add("PlotlyJS")' \
-	&& julia -e 'using Pkg; Pkg.Registry.add("General"); \
-	Pkg.add(url="https://github.com/rikenbit/OnlineNMF.jl")'
+	Pkg.add(url="https://github.com/rikenbit/OnlineNMF.jl"); \
+	Pkg.add("PlotlyJS")'
