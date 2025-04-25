@@ -213,6 +213,10 @@ julia YOUR_HOME_DIR/.julia/v0.x/OnlinePCA/bin/csv2bin \
 julia YOUR_HOME_DIR/.julia/v0.x/OnlinePCA/bin/mm2bin \
     --mmfile Data.mtx --binfile Data.mtx.zst
 
+# BinCOO → Julia Binary
+julia YOUR_HOME_DIR/.julia/v0.x/OnlinePCA/bin/bincoo2bin \
+    --mmfile Data.bincoo --binfile Data.bincoo.zst
+
 # NMF based on Alpha-Divergence
 julia YOUR_HOME_DIR/.julia/v0.x/OnlineNMF/bin/nmf \
     --input Data.zst --dim 3 \
