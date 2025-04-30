@@ -5,7 +5,7 @@ Online Non-negative Matrix Factorization
 [![DOI](https://zenodo.org/badge/170862070.svg)](https://doi.org/10.5281/zenodo.8199413)
 
 ## 📚 Documentation
-[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://rikenbit.github.io/OnlineNMF.jl/latest)
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://rikenbit.github.io/OnlineNMF.jl/dev)
 
 ## Description
 OnlineNMF.jl performs some online-NMF functions for extreamly large scale matrix.
