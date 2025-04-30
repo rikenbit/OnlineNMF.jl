@@ -1,6 +1,7 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 OnlineNMF = "e0c94d91-d830-4516-8b46-9a113d37a394"
+OnlinePCA = "975b03d1-ab45-5730-8389-540698ac00dc"
 
 [compat]
 Documenter = "1"
