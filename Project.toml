@@ -2,7 +2,7 @@ name = "OnlineNMF"
 uuid = "e0c94d91-d830-4516-8b46-9a113d37a394"
 license = "MIT"
 authors = ["kokitsuyuzaki <koki.tsuyuzaki@gmail.com>"]
-version = "0.99.4"
+version = "0.99.5"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"

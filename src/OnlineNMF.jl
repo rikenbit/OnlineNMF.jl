@@ -15,7 +15,7 @@ using ProgressMeter:
 using Random:
     randperm
 using SparseArrays:
-    sparse
+    sparse, spzeros
 
 export output, parse_commandline, nmf, dnmf, sparse_nmf, sparse_dnmf, bincoo_nmf, bincoo_dnmf, graph_laplacian
 
