@@ -125,7 +125,7 @@ group=vcat(repeat(["group1"],inner=100), repeat(["group2"],inner=100), repeat(["
 
 ### NMF based on Alpha-Divergence
 ```julia
-out_nmf_alpha = nmf(input=joinpath(tmp, "Data.zst"), dim=3, alpha=1, numepoch=30, algorithm="alpha")
+out_nmf_alpha = nmf(input=joinpath(tmp, "Data.zst"), dim=3, alpha=2, numepoch=30, algorithm="alpha")
 
 subplots(out_nmf_alpha, group)
 ```
@@ -141,7 +141,7 @@ subplots(out_nmf_beta, group)
 
 ### Semi-Binary MF based on Beta-Divergence
 ```julia
-out_dnmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=1, numepoch=30, binu=10^2)
+out_dnmf_beta = dnmf(input=joinpath(tmp, "Data.zst"), dim=3, beta=2, numepoch=30, binu=10^4)
 minimum(out_dnmf_beta[1])
 maximum(out_dnmf_beta[1])
 
@@ -151,7 +151,7 @@ subplots(out_dnmf_beta, group)
 
 ### Sparse-NMF based on Alpha-Divergence
 ```julia
-out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=1, numepoch=30, algorithm="alpha")
+out_sparse_nmf_alpha = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, alpha=2, numepoch=30, algorithm="alpha")
 
 subplots(out_sparse_nmf_alpha, group)
 ```
@@ -159,7 +159,7 @@ subplots(out_sparse_nmf_alpha, group)
 
 ### Sparse-NMF based on Beta-Divergence
 ```julia
-out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, numepoch=30, algorithm="beta")
+out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=1, numepoch=30, algorithm="beta")
 
 subplots(out_sparse_nmf_beta, group)
 ```
@@ -167,7 +167,7 @@ subplots(out_sparse_nmf_beta, group)
 
 ### Sparse-DNMF based on Beta-Divergence
 ```julia
-out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=1, numepoch=30, binu=10^2)
+out_sparse_dnmf_beta = sparse_dnmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, beta=2, numepoch=30, binu=10^2)
 minimum(out_sparse_dnmf_beta[1])
 maximum(out_sparse_dnmf_beta[1])
 
@@ -177,7 +177,7 @@ subplots(out_sparse_dnmf_beta, group)
 
 ### BinCOO-NMF based on Alpha-Divergence
 ```julia
-out_bincoo_nmf_alpha = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, alpha=1, numepoch=10, algorithm="alpha")
+out_bincoo_nmf_alpha = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, alpha=2, numepoch=10, algorithm="alpha")
 
 subplots(out_bincoo_nmf_alpha, group)
 ```
@@ -185,7 +185,7 @@ subplots(out_bincoo_nmf_alpha, group)
 
 ### BinCOO-NMF based on Beta-Divergence
 ```julia
-out_bincoo_nmf_beta = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=1, numepoch=10, algorithm="beta")
+out_bincoo_nmf_beta = bincoo_nmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=2, numepoch=5, algorithm="beta")
 
 subplots(out_bincoo_nmf_beta, group)
 ```
@@ -193,7 +193,7 @@ subplots(out_bincoo_nmf_beta, group)
 
 ### BinCOO-NMF based on Beta-Divergence
 ```julia
-out_bincoo_dnmf_beta = bincoo_dnmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=1, numepoch=10, binu=10^2)
+out_bincoo_dnmf_beta = bincoo_dnmf(input=joinpath(tmp, "Data.bincoo.zst"), dim=3, beta=2, numepoch=5, binu=10^1)
 minimum(out_bincoo_dnmf_beta[1])
 maximum(out_bincoo_dnmf_beta[1])
 
