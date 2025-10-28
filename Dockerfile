@@ -1,4 +1,4 @@
-FROM julia:1.9-buster
+FROM julia:1.9-bookworm
 
 ENV JULIA_DEPOT_PATH=/usr/local/julia
 
