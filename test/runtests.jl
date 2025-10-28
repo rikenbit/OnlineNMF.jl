@@ -9,6 +9,8 @@ using Distributions
 using SparseArrays
 using MatrixMarket
 
+# lets add some tests + bugfix
+
 # Setting
 ## Input Directory
 tmp = mktempdir()
