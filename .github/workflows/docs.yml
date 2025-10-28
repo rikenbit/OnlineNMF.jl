@@ -11,10 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Julia
+      - name: Set up Julia (pin to 1.10 LTS)
         uses: julia-actions/setup-julia@v2
         with:
-          version: '1'
+          version: '1.10'
 
       - name: Install dependencies
         run: |
