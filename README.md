@@ -50,7 +50,7 @@ using DelimitedFiles
 using SparseArrays
 using MatrixMarket
 
-# CSV
+# CSV（Input data is supposed to be non-negative Integer）
 tmp = mktempdir()
 data = rand(Binomial(10, 0.05), 300, 99)
 data[1:50, 1:33] .= 100*data[1:50, 1:33]
