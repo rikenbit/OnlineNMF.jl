@@ -495,7 +495,7 @@ function init_sparse_nmf(
     lower::Number,
     upper::Number
 )
-    # Type Check
+    # Initialization
     N, M = nm(input)
     alpha = convert(Float32, alpha)
     beta = convert(Float32, beta)
@@ -509,6 +509,49 @@ function init_sparse_nmf(
     chunksize = convert(Int64, chunksize)
     lower = convert(Float32, lower)
     upper = convert(Float32, upper)
+    # Argument Check
+    # Check matrix dimensions (single row/column is meaningless for NMF)
+    if N == 1
+        throw(ArgumentError("Input matrix has only 1 row. NMF requires at least 2 rows."))
+    end
+    if M == 1
+        throw(ArgumentError("Input matrix has only 1 column. NMF requires at least 2 columns."))
+    end
+    # Check non-negative parameters
+    if graphv < 0
+        throw(ArgumentError("graphv must be non-negative, got $graphv"))
+    end
+    if l1u < 0
+        throw(ArgumentError("l1u must be non-negative, got $l1u"))
+    end
+    if l1v < 0
+        throw(ArgumentError("l1v must be non-negative, got $l1v"))
+    end
+    if l2u < 0
+        throw(ArgumentError("l2u must be non-negative, got $l2u"))
+    end
+    if l2v < 0
+        throw(ArgumentError("l2v must be non-negative, got $l2v"))
+    end
+    if dim < 1
+        throw(ArgumentError("dim must be positive, got $dim"))
+    end
+    if numepoch < 1
+        throw(ArgumentError("numepoch must be positive, got $numepoch"))
+    end
+    if chunksize < 1
+        throw(ArgumentError("chunksize must be positive, got $chunksize"))
+    end
+    if lower < 0
+        throw(ArgumentError("lower must be non-negative, got $lower"))
+    end
+    if upper < 0
+        throw(ArgumentError("upper must be non-negative, got $upper"))
+    end
+    # Check dim vs matrix size
+    if min(N, M) < dim
+        throw(ArgumentError("dim ($dim) must be <= min(N, M) = $(min(N, M))"))
+    end
     # Initialization of U and V
     U = load_or_random(initU, N, dim)
     V = load_or_random(initV, M, dim)

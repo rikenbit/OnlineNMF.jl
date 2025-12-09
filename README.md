@@ -10,6 +10,8 @@ Online Non-negative Matrix Factorization
 ## Description
 OnlineNMF.jl performs some online-NMF functions for extreamly large scale matrix.
 
+__Note: The input matrix is supposed to be a non-negative matrix.__
+
 ## Algorithms
 
 - Multiplicative Update (MU)
@@ -26,14 +28,12 @@ OnlineNMF.jl performs some online-NMF functions for extreamly large scale matrix
 ## Installation
 <!-- ```julia
 julia> using Pkg
-julia> Pkg.add(url="https://github.com/rikenbit/OnlinePCA.jl.git")
 julia> Pkg.add(url="https://github.com/rikenbit/OnlineNMF.jl.git")
 julia> Pkg.add("PlotlyJS")
 ```
  -->
 ```julia
 # push the key "]" and type the following command.
-(@julia) pkg> add https://github.com/rikenbit/OnlinePCA.jl
 (@julia) pkg> add https://github.com/rikenbit/OnlineNMF.jl
 (@julia) pkg> add PlotlyJS
 # After that, push Ctrl + C to leave from Pkg REPL mode

@@ -341,13 +341,29 @@ function init_bincoo_dnmf(
     lower::Number,
     upper::Number
 )
-    # Type Check
+    # Initialization
     N, M = nm(input)
     binu = convert(Float32, binu)
     binv = convert(Float32, binv)
     teru = convert(Float32, teru)
     terv = convert(Float32, terv)
     graphv = convert(Float32, graphv)
+    # Check non-negative parameters
+    if binu < 0
+        throw(ArgumentError("binu must be non-negative, got $binu"))
+    end
+    if binv < 0
+        throw(ArgumentError("binv must be non-negative, got $binv"))
+    end
+    if teru < 0
+        throw(ArgumentError("teru must be non-negative, got $teru"))
+    end
+    if terv < 0
+        throw(ArgumentError("terv must be non-negative, got $terv"))
+    end
+    if graphv < 0
+        throw(ArgumentError("graphv must be non-negative, got $graphv"))
+    end
     # Initialization by BinCOO-NMF
     out_nmf = bincoo_nmf(
         input=input,

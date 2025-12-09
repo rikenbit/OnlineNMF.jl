@@ -8,6 +8,7 @@ using Statistics
 using Distributions
 using SparseArrays
 using MatrixMarket
+using Random
 
 # lets add some tests + bugfix
 
@@ -26,6 +27,7 @@ function testfilesize(remove::Bool, x...)
 	end
 end
 
+Random.seed!(123456)
 data = Int64.(ceil.(rand(NegativeBinomial(1, 0.5), 300, 99)))
 data[1:50, 1:33] .= 100*data[1:50, 1:33]
 data[51:100, 34:66] .= 100*data[51:100, 34:66]
@@ -35,7 +37,8 @@ data[101:150, 67:99] .= 100*data[101:150, 67:99]
 write_csv(joinpath(tmp, "Data.csv"), data)
 
 # Matrix Market (MM)
-mmwrite(joinpath(tmp, "Data.mtx"), sparse(data))
+sparse_data = sparse(data)
+mmwrite(joinpath(tmp, "Data.mtx"), sparse_data)
 
 # Binary COO (BinCOO)
 bincoofile = joinpath(tmp, "Data.bincoo")
