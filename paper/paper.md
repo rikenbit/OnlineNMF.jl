@@ -21,9 +21,9 @@ bibliography: paper.bib
 
 # Summary
 
-Non-negative Matrix Factorization (NMF) is a widely used dimensionality reduction technique for identifying a small number of non-negative components that minimize the reconstruction error when applied to high-dimensional data [@review1; @review2]. NMF has been applied across various fields of data science, including face recognition [@face], audio signal processing [@audio], recommender system [@recommend], natural language processing (also known as a "topic model") [@topicmodel], population genetics (also known as "admixture analysis") [@admixture], and omics studies [@review1; @review2, @slideseq].
+Non-negative Matrix Factorization (NMF) is a widely used dimensionality reduction technique for identifying a small number of non-negative components that minimize the reconstruction error when applied to high-dimensional data [@review1; @review2]. NMF has been applied across various fields of data science, including face recognition [@face], audio signal processing [@audio], recommender system [@recommend], natural language processing (also known as a "topic model") [@topicmodel], population genetics (also known as "admixture analysis") [@admixture], and omics studies [@review1; @review2; @slideseq].
 
-Despite its broad applicability, NMF becomes computationally prohibitive for large data matrices, making it difficult to apply in practice. In particular, recent advances in single-cell omics have led to datasets with millions of cells, for which standard NMF implementations often fail to scale. To meet this requirement, I originally developed \texttt{OnlineNMF.jl}, which is a Julia package to perform some NMF algorithms (\url{https://github.com/rikenbit/OnlineNMF.jl}).
+Despite its broad applicability, NMF becomes computationally prohibitive for large data matrices, making it difficult to apply in practice. In particular, recent advances in single-cell omics have led to datasets with millions of cells, for which standard NMF implementations often fail to scale. To meet this requirement, I present \texttt{OnlineNMF.jl}, which is a Julia package to perform some NMF algorithms (\url{https://github.com/rikenbit/OnlineNMF.jl}).
 
 # Statement of need
 
@@ -80,7 +80,7 @@ csv2bin(csvfile=joinpath(tmp, "Data.csv"), binfile=joinpath(tmp, "Data.zst"))
 mm2bin(mmfile=joinpath(tmp, "Data.mtx"), binfile=joinpath(tmp, "Data.mtx.zst"))
 ```
 
-## Setting for plot
+## Plot settings
 
 Define a helper function to visualize the results of NMF using the \texttt{PlotlyJS.jl} package. It generates two subplots: Component-1 vs Component-2 and Component-2 vs Component-3, with color-coded groups.
 
