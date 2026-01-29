@@ -134,7 +134,7 @@ out_nmf_alpha = nmf(input=joinpath(tmp, "Data.zst"),
 subplots(out_nmf_alpha, group)
 ```
 
-![Output of nmf against binarized CSV format.\label{fig:nmf}](nmf_alpha.png){ width=100% }
+![Output of nmf against binarized CSV format.\label{fig:nmf2}](nmf_alpha.png){ width=100% }
 
 ## Sparse-NMF based on Beta-Divergence
 
@@ -147,7 +147,7 @@ out_sparse_nmf_beta = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"),
 subplots(out_sparse_nmf_beta, group)
 ```
 
-![Output of sparse_nmf against binarized MM format.\label{fig:nmf2}](sparse_nmf_beta.png){ width=100% }
+![Output of sparse_nmf against binarized MM format.\label{fig:nmf3}](sparse_nmf_beta.png){ width=100% }
 
 
 # Related work
