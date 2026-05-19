@@ -90,6 +90,85 @@ function rho(beta; root=false)
     return Float32(new_beta)
 end
 
+# Stream-reading helpers for chunked sparse / bincoo input.
+# Returns (count, overflow_buf). If `overflow_buf` already holds an entry whose
+# row is past the current chunk (which happens whenever the chunk range falls
+# entirely inside an empty region of the input — e.g. leading zero rows), we
+# leave it untouched and skip reading from the stream so the entry isn't
+# overwritten and is preserved for a later chunk.
+function read_sparse_chunk!(
+    rows::Vector{UInt32},
+    cols::Vector{UInt32},
+    vals::Vector{UInt32},
+    stream,
+    overflow_buf::Vector{UInt32},
+    n::Integer,
+    batch_size::Integer,
+)
+    count = 0
+    if length(overflow_buf) > 0
+        if n ≤ overflow_buf[1] < n + batch_size
+            count += 1
+            rows[count] = overflow_buf[1] - n + 1
+            cols[count] = overflow_buf[2]
+            vals[count] = overflow_buf[3]
+            empty!(overflow_buf)
+        else
+            return count, overflow_buf
+        end
+    end
+    while !eof(stream)
+        buf = zeros(UInt32, 3)
+        read!(stream, buf)
+        row, col, val = buf[1], buf[2], buf[3]
+        if n ≤ row < n + batch_size
+            count += 1
+            rows[count] = row - n + 1
+            cols[count] = col
+            vals[count] = val
+        else
+            overflow_buf = buf
+            return count, overflow_buf
+        end
+    end
+    return count, overflow_buf
+end
+
+function read_bincoo_chunk!(
+    rows::Vector{UInt32},
+    cols::Vector{UInt32},
+    stream,
+    overflow_buf::Vector{UInt32},
+    n::Integer,
+    batch_size::Integer,
+)
+    count = 0
+    if length(overflow_buf) > 0
+        if n ≤ overflow_buf[1] < n + batch_size
+            count += 1
+            rows[count] = overflow_buf[1] - n + 1
+            cols[count] = overflow_buf[2]
+            empty!(overflow_buf)
+        else
+            return count, overflow_buf
+        end
+    end
+    while !eof(stream)
+        buf = zeros(UInt32, 2)
+        read!(stream, buf)
+        row, col = buf[1], buf[2]
+        if n ≤ row < n + batch_size
+            count += 1
+            rows[count] = row - n + 1
+            cols[count] = col
+        else
+            overflow_buf = buf
+            return count, overflow_buf
+        end
+    end
+    return count, overflow_buf
+end
+
 # Check NaN value
 function checkNaN(X::AbstractArray)
     if any(isnan, X)
@@ -399,32 +478,7 @@ function RecError(
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
             vals = zeros(UInt32, max_size)
-            count = 0
-            ############### Overflow buffer ###############
-            if length(overflow_buf) > 0
-                count += 1
-                # Re-mapping row index
-                rows[count] = overflow_buf[1] - n + 1
-                cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
-                empty!(overflow_buf)
-            end
-            ###############################################
-            while !eof(stream)
-                buf = zeros(UInt32, 3)
-                read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
-                if n ≤ row < n + batch_size
-                    count += 1
-                    # Re-mapping row index
-                    rows[count] = row - n + 1
-                    cols[count] = col
-                    vals[count] = val
-                else
-                    overflow_buf = buf
-                    break
-                end
-            end
+            count, overflow_buf = read_sparse_chunk!(rows, cols, vals, stream, overflow_buf, n, batch_size)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
@@ -466,30 +520,7 @@ function RecError(
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            count = 0
-            ############### Overflow buffer ###############
-            if length(overflow_buf) > 0
-                count += 1
-                # Re-mapping row index
-                rows[count] = overflow_buf[1] - n + 1
-                cols[count] = overflow_buf[2]
-                empty!(overflow_buf)
-            end
-            ###############################################
-            while !eof(stream)
-                buf = zeros(UInt32, 2)
-                read!(stream, buf)
-                row, col = buf[1], buf[2]
-                if n ≤ row < n + batch_size
-                    count += 1
-                    # Re-mapping row index
-                    rows[count] = row - n + 1
-                    cols[count] = col
-                else
-                    overflow_buf = buf
-                    break
-                end
-            end
+            count, overflow_buf = read_bincoo_chunk!(rows, cols, stream, overflow_buf, n, batch_size)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)

@@ -48,6 +48,29 @@ out_chunk_odd = sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, algorithm
 @test size(out_chunk_odd[2]) == (99, 3)
 @test size(out_chunk_odd[3]) == ()
 
+# Leading zero rows (regression test for #25). With chunks that fall before
+# the first non-zero row, the per-chunk overflow buffer must not be applied
+# to a chunk that doesn't actually contain its row. Before the fix this raised
+# either ArgumentError ("row indices I[k] must satisfy 1 <= I[k] <= m") or
+# InexactError(trunc, UInt32, ...) inside the chunk reader, regardless of the
+# divergence/algorithm chosen. We verify here that the chunk reader returns,
+# and that RecError (which exercises the same code path) returns a finite
+# value. Random initial U/V can later produce NaNs from rows that are all-zero
+# in X — that is a separate, pre-existing limitation of the multiplicative
+# update on zero rows and not what this regression is checking.
+leading_zero_data = sparse(copy(data))
+leading_zero_data[1:80, :] .= 0
+dropzeros!(leading_zero_data)
+mmwrite(joinpath(tmp_sparse_nmf_alpha, "LeadingZero.mtx"), leading_zero_data)
+mm2bin(mmfile=joinpath(tmp_sparse_nmf_alpha, "LeadingZero.mtx"), binfile=joinpath(tmp_sparse_nmf_alpha, "LeadingZero.mtx.zst"))
+let lz_input = joinpath(tmp_sparse_nmf_alpha, "LeadingZero.mtx.zst")
+    U_init = ones(Float32, 300, 3)
+    V_init = ones(Float32, 99, 3)
+    for cs in (1, 7, 50, 1000)
+        @test isfinite(OnlineNMF.RecError(lz_input, U_init, V_init, OnlineNMF.SPARSE_NMF(), cs))
+    end
+end
+
 # Extreme parameters
 @test_throws Exception sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, graphv=-1, algorithm="alpha", chunksize=100)
 @test_throws Exception sparse_nmf(input=joinpath(tmp, "Data.mtx.zst"), dim=3, l1u=-1, algorithm="alpha", chunksize=100)

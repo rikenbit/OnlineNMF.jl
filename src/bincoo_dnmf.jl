@@ -204,30 +204,7 @@ function update_bcdU_numer_BETA(input, N, M, U, V, beta, binu, teru, chunksize)
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            count = 0
-            ############### Overflow buffer ###############
-            if length(overflow_buf) > 0
-                count += 1
-                # Re-mapping row index
-                rows[count] = overflow_buf[1] - n + 1
-                cols[count] = overflow_buf[2]
-                empty!(overflow_buf)
-            end
-            ###############################################
-            while !eof(stream)
-                buf = zeros(UInt32, 2)
-                read!(stream, buf)
-                row, col = buf[1], buf[2]
-                if n ≤ row < n + batch_size
-                    count += 1
-                    # Re-mapping row index
-                    rows[count] = row - n + 1
-                    cols[count] = col
-                else
-                    overflow_buf = buf
-                    break
-                end
-            end
+            count, overflow_buf = read_bincoo_chunk!(rows, cols, stream, overflow_buf, n, batch_size)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
@@ -272,30 +249,7 @@ function update_bcdV_numer_BETA(input, N, M, U, V, beta, binv, terv, chunksize)
             max_size = (batch_size + 1) * M # For overflow
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
-            count = 0
-            ############### Overflow buffer ###############
-            if length(overflow_buf) > 0
-                count += 1
-                # Re-mapping row index
-                rows[count] = overflow_buf[1] - n + 1
-                cols[count] = overflow_buf[2]
-                empty!(overflow_buf)
-            end
-            ###############################################
-            while !eof(stream)
-                buf = zeros(UInt32, 2)
-                read!(stream, buf)
-                row, col = buf[1], buf[2]
-                if n ≤ row < n + batch_size
-                    count += 1
-                    # Re-mapping row index
-                    rows[count] = row - n + 1
-                    cols[count] = col
-                else
-                    overflow_buf = buf
-                    break
-                end
-            end
+            count, overflow_buf = read_bincoo_chunk!(rows, cols, stream, overflow_buf, n, batch_size)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)

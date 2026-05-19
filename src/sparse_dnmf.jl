@@ -205,32 +205,7 @@ function update_spdU_numer_BETA(input, N, M, U, V, beta, binu, teru, chunksize)
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
             vals = zeros(UInt32, max_size)
-            count = 0
-            ############### Overflow buffer ###############
-            if length(overflow_buf) > 0
-                count += 1
-                # Re-mapping row index
-                rows[count] = overflow_buf[1] - n + 1
-                cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
-                empty!(overflow_buf)
-            end
-            ###############################################
-            while !eof(stream)
-                buf = zeros(UInt32, 3)
-                read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
-                if n ≤ row < n + batch_size
-                    count += 1
-                    # Re-mapping row index
-                    rows[count] = row - n + 1
-                    cols[count] = col
-                    vals[count] = val
-                else
-                    overflow_buf = buf
-                    break
-                end
-            end
+            count, overflow_buf = read_sparse_chunk!(rows, cols, vals, stream, overflow_buf, n, batch_size)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
@@ -277,32 +252,7 @@ function update_spdV_numer_BETA(input, N, M, U, V, beta, binv, terv, chunksize)
             rows = zeros(UInt32, max_size)
             cols = zeros(UInt32, max_size)
             vals = zeros(UInt32, max_size)
-            count = 0
-            ############### Overflow buffer ###############
-            if length(overflow_buf) > 0
-                count += 1
-                # Re-mapping row index
-                rows[count] = overflow_buf[1] - n + 1
-                cols[count] = overflow_buf[2]
-                vals[count] = overflow_buf[3]
-                empty!(overflow_buf)
-            end
-            ###############################################
-            while !eof(stream)
-                buf = zeros(UInt32, 3)
-                read!(stream, buf)
-                row, col, val = buf[1], buf[2], buf[3]
-                if n ≤ row < n + batch_size
-                    count += 1
-                    # Re-mapping row index
-                    rows[count] = row - n + 1
-                    cols[count] = col
-                    vals[count] = val
-                else
-                    overflow_buf = buf
-                    break
-                end
-            end
+            count, overflow_buf = read_sparse_chunk!(rows, cols, vals, stream, overflow_buf, n, batch_size)
             # Remove 0s from the end
             resize!(rows, count)
             resize!(cols, count)
